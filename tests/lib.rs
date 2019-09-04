@@ -10,7 +10,10 @@ fn single_proposer_three_acceptors_one_request() {
     let mut p = HashMap::new();
     p.insert(
         "p1".to_string(),
-        Proposer::new(vec!["a1".to_string(), "a2".to_string(), "a3".to_string()]),
+        Proposer::new(
+            "p1".to_string(),
+            vec!["a1".to_string(), "a2".to_string(), "a3".to_string()],
+        ),
     );
 
     let mut a = HashMap::new();
@@ -30,5 +33,8 @@ fn single_proposer_three_acceptors_one_request() {
     let mut s = simulator::Simulator::new(p, a, inbox);
     s.run().unwrap();
 
-    assert_eq!(s.proposers.get("p1").unwrap().decided_value(), Some("v1".to_string()));
+    assert_eq!(
+        s.proposers.get("p1").unwrap().decided_value(),
+        Some("v1".to_string())
+    );
 }

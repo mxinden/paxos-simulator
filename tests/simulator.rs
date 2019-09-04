@@ -1,6 +1,6 @@
 use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
-use paxos_simulator::{Address, Msg};
+use paxos_simulator::{Address, Body, Header, Msg};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Default)]
@@ -33,8 +33,17 @@ impl Simulator {
     }
 
     pub fn dispatch_msg(&mut self, m: Msg) {
-        match m {
-            _ => unimplemented!(),
+        let copy = m.clone();
+        match m.body {
+            Body::Request(v) => {
+                for (address, p) in self.proposers.iter_mut() {
+                    self.inbox.append(&mut p.process(copy.clone()).into());
+                }
+            }
+            Body::Prepare(_) => unimplemented!(),
+            Body::Promise(_, _, _) => unimplemented!(),
+            Body::Propose => unimplemented!(),
+            Body::Accept => unimplemented!(),
         }
     }
 }
