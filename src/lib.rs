@@ -2,16 +2,17 @@ pub mod proposer;
 pub mod acceptor;
 
 pub struct Msg {
-    header: Header,
-    body: Body,
+    pub header: Header,
+    pub body: Body,
 }
 
 pub struct Header {
-    from: Address,
-    To: Address,
+    pub from: Address,
+    pub to: Address,
 }
 
 pub enum Body{
+    Request(String),
     Prepare,
     Promise,
     Propose,

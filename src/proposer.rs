@@ -1,9 +1,25 @@
-use crate::Msg;
+use crate::{Address, Msg};
 
-pub struct Proposer{}
+pub struct Proposer {
+    acceptors: Vec<Address>,
+    decided_value: Option<String>,
+}
 
-impl Proposer{
+impl Proposer {
+    pub fn new(acceptors: Vec<Address>) -> Self {
+        Self {
+            acceptors,
+            decided_value: None,
+        }
+    }
+
     pub fn process(m: Msg) -> Vec<Msg> {
-        vec![]
+        match m {
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn decided_value(&self) -> Option<String> {
+        self.decided_value.clone()
     }
 }

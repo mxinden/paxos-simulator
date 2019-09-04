@@ -6,18 +6,29 @@ use std::collections::{HashMap, VecDeque};
 #[derive(Default)]
 pub struct Simulator {
     now: u64,
-    proposers: HashMap<Address, Proposer>,
+    pub proposers: HashMap<Address, Proposer>,
     acceptors: HashMap<Address, Acceptor>,
-    inbox: std::collections::VecDeque<Msg>,
+    inbox: VecDeque<Msg>,
 }
 
 impl Simulator {
-    pub fn new() -> Simulator {
-        Simulator::default()
+    pub fn new(
+        proposers: HashMap<Address, Proposer>,
+        acceptors: HashMap<Address, Acceptor>,
+        inbox: VecDeque<Msg>,
+    ) -> Simulator {
+        Simulator {
+            now: Default::default(),
+            proposers,
+            acceptors,
+            inbox,
+        }
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
-        while let Some(m) = self.inbox.pop_front() {};
+        while let Some(m) = self.inbox.pop_front() {
+            self.dispatch_msg(m);
+        }
         Ok(())
     }
 
