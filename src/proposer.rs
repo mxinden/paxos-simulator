@@ -21,7 +21,7 @@ impl Proposer {
             // good idea?
             current_epoch: Epoch::default(),
             max_epoch_received: None,
-            state: ProposerState::WaitingForRequest,
+            state: ProposerState::Idle,
         }
     }
 
@@ -42,7 +42,6 @@ impl Proposer {
     }
 
     fn process_msg(&mut self, m: Msg) -> Vec<Msg> {
-        let msg_clone = m.clone();
         println!("processing msg '{:?}'", m);
         match m.body {
             Body::Request(v) => self.process_request(m.header, v),
@@ -54,8 +53,8 @@ impl Proposer {
 
     fn process_request(&mut self, header: Header, value: Value) -> Vec<Msg> {
         match self.state {
-            ProposerState::WaitingForRequest => {
-                self.state = ProposerState::WaitingForSufficientPromises(value, vec![]);
+            ProposerState::Idle => {
+                self.state = ProposerState::Preparing(value, vec![]);
 
                 let body = Body::Prepare(self.current_epoch.clone());
 
@@ -88,15 +87,15 @@ impl Proposer {
         accepted_epoch: Option<Epoch>,
         accepted_value: Option<Value>,
     ) -> Vec<Msg> {
-        let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+        let state = std::mem::replace(&mut self.state, ProposerState::Idle);
         match state {
-            ProposerState::WaitingForSufficientPromises(value, mut received_promises) => {
+            ProposerState::Preparing(value, mut received_promises) => {
                 received_promises.push((promised_epoch, accepted_epoch, accepted_value));
 
                 if received_promises.len() < self.acceptors.len() / 2 + 1 {
                     println!("not a majority yet");
                     self.state =
-                        ProposerState::WaitingForSufficientPromises(value, received_promises);
+                        ProposerState::Preparing(value, received_promises);
                     return vec![];
                 }
 
@@ -112,7 +111,7 @@ impl Proposer {
                     },
                 );
 
-                self.state = ProposerState::WaitingForSufficientAccepts(
+                self.state = ProposerState::Proposing(
                     highest_epoch,
                     highest_epoch_value.clone(),
                     0,
@@ -141,9 +140,9 @@ impl Proposer {
     }
 
     fn process_accept(&mut self, epoch: Epoch) -> Vec<Msg> {
-        let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+        let state = std::mem::replace(&mut self.state, ProposerState::Idle);
         match state {
-            ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count) => {
+            ProposerState::Proposing(expected_epoch, value, count) => {
                 if epoch != expected_epoch {
                     panic!("got unexpected epoch");
                 }
@@ -152,12 +151,12 @@ impl Proposer {
 
                 if count < self.acceptors.len() / 2 + 1 {
                     self.state =
-                        ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count);
+                        ProposerState::Proposing(expected_epoch, value, count);
                     return vec![];
                 }
 
                 // TODO: Should we be increasing the epoch?
-                self.state = ProposerState::WaitingForRequest;
+                self.state = ProposerState::Idle;
 
                 return vec![Msg {
                     header: Header {
@@ -178,8 +177,8 @@ impl Proposer {
 
 #[derive(Clone, Debug)]
 enum ProposerState {
-    WaitingForRequest,
+    Idle,
     /// Value to propose and promises received so far.
-    WaitingForSufficientPromises(Value, Vec<(Epoch, Option<Epoch>, Option<Value>)>),
-    WaitingForSufficientAccepts(Epoch, Value, usize),
+    Preparing(Value, Vec<(Epoch, Option<Epoch>, Option<Value>)>),
+    Proposing(Epoch, Value, usize),
 }
