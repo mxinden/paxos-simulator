@@ -1,27 +1,28 @@
 pub mod acceptor;
 pub mod proposer;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Msg {
     pub header: Header,
     pub body: Body,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Header {
     pub from: Address,
     pub to: Address,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Body {
     /// Request by an end-user.
-    Request(Address),
+    Request(Value),
     /// Response by a proposer to an end-user.
     Response,
     Prepare(Epoch),
-    Promise(Option<Epoch>, Option<Epoch>, Option<Value>),
-    Propose,
+    /// Promised epoch, accepted epoch, accepted value.
+    Promise(Epoch, Option<Epoch>, Option<Value>),
+    Propose(Epoch, Value),
     Accept,
 }
 
@@ -34,14 +35,36 @@ impl Address {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialOrd, PartialEq)]
-pub struct Instant(u64);
+#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Debug)]
+pub struct Instant(pub u64);
 
-#[derive(Clone, Copy, Default, PartialOrd, PartialEq)]
+impl std::ops::Add for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::Add<u64> for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Debug)]
 pub struct Epoch(u64);
 
-#[derive(Clone, Default, PartialOrd, PartialEq)]
+#[derive(Clone, Default, PartialOrd, PartialEq, Debug)]
 pub struct Value(String);
+
+impl Value {
+    pub fn new(v: &str) -> Self {
+        Self(v.to_string())
+    }
+}
 
 #[cfg(test)]
 mod tests {

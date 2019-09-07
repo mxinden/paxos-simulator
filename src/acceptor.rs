@@ -1,4 +1,5 @@
-use crate::{Address, Body, Header, Instant, Epoch, Msg, Value};
+use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
+use std::collections::VecDeque;
 
 #[derive(Default)]
 pub struct Acceptor {
@@ -6,6 +7,7 @@ pub struct Acceptor {
     promised_epoch: Option<Epoch>,
     accepted_epoch: Option<Epoch>,
     accepted_value: Option<Value>,
+    inbox: VecDeque<Msg>,
 }
 
 impl Acceptor {
@@ -13,14 +15,29 @@ impl Acceptor {
         Self::default()
     }
 
-    pub fn process(&mut self, m: Msg) -> Vec<Msg> {
+    /// Receive adds the given message to the incoming-messages buffer. It is
+    /// *not* allowed to do any kind of processing.
+    pub fn receive(&mut self, m: Msg) {
+        self.inbox.push_back(m);
+    }
+
+    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
+        let messages: Vec<Msg> = self.inbox.drain(0..).collect();
+        messages
+            .into_iter()
+            .map(|m| self.process_msg(m))
+            .flatten()
+            .collect()
+    }
+
+    fn process_msg(&mut self, m: Msg) -> Vec<Msg> {
         match m.body {
             Body::Prepare(i) => {
                 if self.promised_epoch.map(|e| e > i).unwrap_or(false) {
                     return vec![];
                 }
 
-                // TODO: Set own promised epoch.
+                self.promised_epoch = Some(i);
 
                 return vec![Msg {
                     header: Header {
@@ -28,7 +45,7 @@ impl Acceptor {
                         to: m.header.from,
                     },
                     body: Body::Promise(
-                        Some(i),
+                        i,
                         self.accepted_epoch.clone(),
                         self.accepted_value.clone(),
                     ),

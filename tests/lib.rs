@@ -1,4 +1,4 @@
-use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address};
+use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Value};
 use paxos_simulator::{Body, Header, Msg};
 use std::collections::{HashMap, VecDeque};
 
@@ -26,7 +26,7 @@ fn single_proposer_three_acceptors_one_request() {
             from: Address::new("u1"),
             to: Address::new("p1"),
         },
-        body: Body::Request(Address::new("v1")),
+        body: Body::Request(Value::new("v1")),
     });
 
     let mut s = simulator::Simulator::new(p, a, inbox);
