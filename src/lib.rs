@@ -22,7 +22,7 @@ pub enum Body {
     Prepare(Epoch),
     /// Promised epoch, accepted epoch, accepted value.
     // TODO: Why not combine the two options, they never occur separately.
-    Promise(Epoch, Option<Epoch>, Option<Value>),
+    Promise(Epoch, Option<(Epoch, Value)>),
     Propose(Epoch, Value),
     Accept(Epoch),
 }

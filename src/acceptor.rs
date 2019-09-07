@@ -5,8 +5,7 @@ use std::collections::VecDeque;
 pub struct Acceptor {
     address: Address,
     promised_epoch: Option<Epoch>,
-    accepted_epoch: Option<Epoch>,
-    accepted_value: Option<Value>,
+    accepted: Option<(Epoch, Value)>,
     inbox: VecDeque<Msg>,
 }
 
@@ -46,8 +45,7 @@ impl Acceptor {
                     },
                     body: Body::Promise(
                         i,
-                        self.accepted_epoch.clone(),
-                        self.accepted_value.clone(),
+                        self.accepted.clone(),
                     ),
                 }];
             }
@@ -56,8 +54,7 @@ impl Acceptor {
                     return vec![];
                 }
 
-                self.accepted_epoch = Some(proposed_epoch);
-                self.accepted_value = Some(value);
+                self.accepted = Some((proposed_epoch, value));
 
                 return vec![Msg {
                     header: Header {

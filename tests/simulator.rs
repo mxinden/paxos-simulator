@@ -69,7 +69,7 @@ impl Simulator {
         match m.body {
             Body::Request(_) => self.dispatch_msg_to_proposer(m),
             Body::Prepare(_) => self.dispatch_msg_to_acceptor(m),
-            Body::Promise(_, _, _) => self.dispatch_msg_to_proposer(m),
+            Body::Promise(_, _) => self.dispatch_msg_to_proposer(m),
             Body::Propose(_, _) => self.dispatch_msg_to_acceptor(m),
             Body::Accept(_) => self.dispatch_msg_to_proposer(m),
             Body::Response(_) => self.responses.push(m),
