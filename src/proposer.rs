@@ -1,10 +1,11 @@
-use crate::{Address, Body, Header, Msg, Instant};
+use crate::{Address, Body, Epoch, Header, Instant, Msg};
+use std::collections::VecDeque;
 
 pub struct Proposer {
     address: Address,
     acceptors: Vec<Address>,
-    decided_value: Option<String>,
-    now: Instant,
+    inbox: VecDeque<Msg>,
+    current_epoch: Epoch,
 }
 
 impl Proposer {
@@ -12,29 +13,46 @@ impl Proposer {
         Self {
             address,
             acceptors,
-            decided_value: None,
-            now: Default::default(),
+            inbox: Default::default(),
+            // TODO: This way all proposers start with the same epoch. Is that a
+            // good idea?
+            current_epoch: Epoch::default(),
         }
     }
 
-    pub fn process(&mut self, m: Msg) -> Vec<Msg> {
+    /// Receive adds the given message to the incoming-messages buffer. It is
+    /// *not* allowed to do any kind of processing.
+    pub fn receive(&mut self, m: Msg) {
+        self.inbox.push_back(m);
+    }
+
+    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
+        let messages: Vec<Msg>= self.inbox
+            .drain(0..).collect();
+        messages.into_iter()
+            .map(|m| self.process_msg(m))
+            .flatten()
+            .collect()
+    }
+
+    fn process_msg(&mut self, m: Msg) -> Vec<Msg> {
         match m.body {
             Body::Request(v) => {
-                let body = Body::Prepare(self.now.clone());
+                let body = Body::Prepare(self.current_epoch.clone());
 
-                return self.acceptors.iter().map(|a| Msg {
-                    header: Header {
-                        from: self.address.clone(),
-                        to: a.clone(),
-                    },
-                    body: body.clone(),
-                }).collect();
+                return self
+                    .acceptors
+                    .iter()
+                    .map(|a| Msg {
+                        header: Header {
+                            from: self.address.clone(),
+                            to: a.clone(),
+                        },
+                        body: body.clone(),
+                    })
+                    .collect();
             }
             _ => unimplemented!(),
         }
-    }
-
-    pub fn decided_value(&self) -> Option<String> {
-        self.decided_value.clone()
     }
 }

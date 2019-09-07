@@ -35,15 +35,20 @@ impl Simulator {
     pub fn dispatch_msg(&mut self, m: Msg) {
         let copy = m.clone();
         match m.body {
-            Body::Request(v) => {
-                for (address, p) in self.proposers.iter_mut() {
-                    self.inbox.append(&mut p.process(copy.clone()).into());
+            Body::Request(v) => self
+                .proposers
+                .get_mut(&m.header.to)
+                .unwrap()
+                .receive(copy),
+            Body::Prepare(_) => {
+                for (_, a) in self.acceptors.iter_mut() {
+                    self.inbox.append(&mut a.process(copy.clone()).into())
                 }
             }
-            Body::Prepare(_) => unimplemented!(),
             Body::Promise(_, _, _) => unimplemented!(),
             Body::Propose => unimplemented!(),
             Body::Accept => unimplemented!(),
+            Body::Response => unimplemented!(),
         }
     }
 }

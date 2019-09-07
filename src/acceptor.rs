@@ -1,10 +1,10 @@
-use crate::{Address, Body, Header, Instant, Msg, Value};
+use crate::{Address, Body, Header, Instant, Epoch, Msg, Value};
 
 #[derive(Default)]
 pub struct Acceptor {
     address: Address,
-    promised_epoch: Option<Instant>,
-    accepted_epoch: Option<Instant>,
+    promised_epoch: Option<Epoch>,
+    accepted_epoch: Option<Epoch>,
     accepted_value: Option<Value>,
 }
 
