@@ -51,6 +51,25 @@ impl Acceptor {
                     ),
                 }];
             }
+            Body::Propose(proposed_epoch, value) => {
+                if self.promised_epoch.map(|e| e > proposed_epoch).unwrap_or(false) {
+                    return vec![];
+                }
+
+                self.accepted_epoch = Some(proposed_epoch);
+                self.accepted_value = Some(value);
+
+                return vec![Msg {
+                    header: Header {
+                        from: self.address.clone(),
+                        to: m.header.from,
+                    },
+                    body: Body::Accept(
+                        proposed_epoch,
+                    ),
+                }];
+
+            }
             _ => unimplemented!(),
         }
     }

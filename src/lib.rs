@@ -23,7 +23,7 @@ pub enum Body {
     /// Promised epoch, accepted epoch, accepted value.
     Promise(Epoch, Option<Epoch>, Option<Value>),
     Propose(Epoch, Value),
-    Accept,
+    Accept(Epoch),
 }
 
 #[derive(Eq, Hash, Clone, Default, PartialOrd, PartialEq, Debug)]

@@ -64,14 +64,21 @@ impl Simulator {
     }
 
     fn dispatch_msg(&mut self, m: Msg) {
-        let copy = m.clone();
         match m.body {
-            Body::Request(v) => self.proposers.get_mut(&m.header.to).unwrap().receive(copy),
-            Body::Prepare(v) => self.acceptors.get_mut(&m.header.to).unwrap().receive(copy),
-            Body::Promise(_, _, _) => self.proposers.get_mut(&m.header.to).unwrap().receive(copy),
-            Body::Propose(_, _) => unimplemented!(),
-            Body::Accept => unimplemented!(),
+            Body::Request(_) => self.dispatch_msg_to_proposer(m),
+            Body::Prepare(_) => self.dispatch_msg_to_acceptor(m),
+            Body::Promise(_, _, _) => self.dispatch_msg_to_proposer(m),
+            Body::Propose(_, _) => self.dispatch_msg_to_acceptor(m),
+            Body::Accept(_) => self.dispatch_msg_to_proposer(m),
             Body::Response => unimplemented!(),
-        }
+        };
+    }
+
+    fn dispatch_msg_to_proposer(&mut self, m: Msg) {
+        self.proposers.get_mut(&m.header.to).unwrap().receive(m);
+    }
+
+    fn dispatch_msg_to_acceptor(&mut self, m: Msg) {
+        self.acceptors.get_mut(&m.header.to).unwrap().receive(m);
     }
 }
