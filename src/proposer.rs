@@ -45,123 +45,133 @@ impl Proposer {
         let msg_clone = m.clone();
         println!("processing msg '{:?}'", m);
         match m.body {
-            Body::Request(v) => match self.state {
-                ProposerState::WaitingForRequest => {
-                    self.state = ProposerState::WaitingForSufficientPromises(v, vec![]);
+            Body::Request(v) => self.process_request(m.header, v),
+            Body::Promise(pe, ae, av) => self.process_promise(pe, ae, av),
+            Body::Accept(epoch) => self.process_accept(epoch),
+            Body::Prepare(_) | Body::Propose(_, _) | Body::Response(_) => unimplemented!(),
+        }
+    }
 
-                    let body = Body::Prepare(self.current_epoch.clone());
+    fn process_request(&mut self, header: Header, value: Value) -> Vec<Msg> {
+        match self.state {
+            ProposerState::WaitingForRequest => {
+                self.state = ProposerState::WaitingForSufficientPromises(value, vec![]);
 
-                    return self
-                        .acceptors
-                        .iter()
-                        .map(|a| Msg {
-                            header: Header {
-                                from: self.address.clone(),
-                                to: a.clone(),
-                            },
-                            body: body.clone(),
-                        })
-                        .collect();
-                }
-                _ => {
-                    println!("already got a request in flight, delaying new one");
-                    self.inbox.push_back(msg_clone);
+                let body = Body::Prepare(self.current_epoch.clone());
+
+                return self
+                    .acceptors
+                    .iter()
+                    .map(|a| Msg {
+                        header: Header {
+                            from: self.address.clone(),
+                            to: a.clone(),
+                        },
+                        body: body.clone(),
+                    })
+                    .collect();
+            }
+            _ => {
+                println!("already got a request in flight, delaying new one");
+                self.inbox.push_back(Msg {
+                    header,
+                    body: Body::Request(value),
+                });
+                return vec![];
+            }
+        }
+    }
+
+    fn process_promise(
+        &mut self,
+        promised_epoch: Epoch,
+        accepted_epoch: Option<Epoch>,
+        accepted_value: Option<Value>,
+    ) -> Vec<Msg> {
+        let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+        match state {
+            ProposerState::WaitingForSufficientPromises(value, mut received_promises) => {
+                received_promises.push((promised_epoch, accepted_epoch, accepted_value));
+
+                if received_promises.len() < self.acceptors.len() / 2 + 1 {
+                    println!("not a majority yet");
+                    self.state =
+                        ProposerState::WaitingForSufficientPromises(value, received_promises);
                     return vec![];
                 }
-            },
-            Body::Promise(promised_epoch, accepted_epoch, accepted_value) => {
-                let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
-                match state {
-                    ProposerState::WaitingForSufficientPromises(value, mut received_promises) => {
-                        received_promises.push((promised_epoch, accepted_epoch, accepted_value));
 
-                        if received_promises.len() < self.acceptors.len() / 2 + 1 {
-                            println!("not a majority yet");
-                            self.state = ProposerState::WaitingForSufficientPromises(
-                                value,
-                                received_promises,
-                            );
-                            return vec![];
+                // Let's determine if we got promises for our proposal, or
+                // if there was something higher.
+                let (highest_epoch, highest_epoch_value) = received_promises.into_iter().fold(
+                    (self.current_epoch, value),
+                    |(highest_epoch, v), promise| -> (Epoch, Value) {
+                        if promise.1.map(|e| e > highest_epoch).unwrap_or(false) {
+                            return (promise.1.unwrap(), promise.2.unwrap());
                         }
+                        (highest_epoch, v)
+                    },
+                );
 
-                        // Let's determine if we got promises for our proposal, or
-                        // if there was something higher.
-                        let (highest_epoch, highest_epoch_value) =
-                            received_promises.into_iter().fold(
-                                (self.current_epoch, value),
-                                |(highest_epoch, v), promise| -> (Epoch, Value) {
-                                    if promise.1.map(|e| e > highest_epoch).unwrap_or(false) {
-                                        return (promise.1.unwrap(), promise.2.unwrap());
-                                    }
-                                    (highest_epoch, v)
-                                },
-                            );
+                self.state = ProposerState::WaitingForSufficientAccepts(
+                    highest_epoch,
+                    highest_epoch_value.clone(),
+                    0,
+                );
 
-                        self.state = ProposerState::WaitingForSufficientAccepts(
-                            highest_epoch,
-                            highest_epoch_value.clone(),
-                            0,
-                        );
+                let propose_body = Body::Propose(highest_epoch, highest_epoch_value);
 
-                        let propose_body = Body::Propose(highest_epoch, highest_epoch_value);
-
-                        return self
-                            .acceptors
-                            .iter()
-                            .map(|a| Msg {
-                                header: Header {
-                                    from: self.address.clone(),
-                                    to: a.clone(),
-                                },
-                                body: propose_body.clone(),
-                            })
-                            .collect();
-                    }
-                    _ => {
-                        self.state = state;
-                        println!("got a promise even though we aren't waiting for any");
-                        return vec![];
-                    }
-                }
+                return self
+                    .acceptors
+                    .iter()
+                    .map(|a| Msg {
+                        header: Header {
+                            from: self.address.clone(),
+                            to: a.clone(),
+                        },
+                        body: propose_body.clone(),
+                    })
+                    .collect();
             }
-            Body::Accept(epoch) => {
-                let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
-                match state {
-                    ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count) => {
-                        if epoch != expected_epoch {
-                            panic!("got unexpected epoch");
-                        }
-
-                        let count = count + 1;
-
-                        if count < self.acceptors.len() / 2 + 1 {
-                            self.state = ProposerState::WaitingForSufficientAccepts(
-                                expected_epoch,
-                                value,
-                                count,
-                            );
-                            return vec![];
-                        }
-
-                        // TODO: Should we be increasing the epoch?
-                        self.state = ProposerState::WaitingForRequest;
-
-                        return vec![Msg {
-                            header: Header {
-                                from: self.address.clone(),
-                                // TODO: We need to track the client address along the way.
-                                to: Address::new(""),
-                            },
-                            body: Body::Response(value),
-                        }];
-                    }
-                    _ => {
-                        println!("got an accept even though we aren't waiting for any");
-                        return vec![];
-                    }
-                }
+            _ => {
+                self.state = state;
+                println!("got a promise even though we aren't waiting for any");
+                return vec![];
             }
-            _ => unimplemented!(),
+        }
+    }
+
+    fn process_accept(&mut self, epoch: Epoch) -> Vec<Msg> {
+        let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+        match state {
+            ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count) => {
+                if epoch != expected_epoch {
+                    panic!("got unexpected epoch");
+                }
+
+                let count = count + 1;
+
+                if count < self.acceptors.len() / 2 + 1 {
+                    self.state =
+                        ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count);
+                    return vec![];
+                }
+
+                // TODO: Should we be increasing the epoch?
+                self.state = ProposerState::WaitingForRequest;
+
+                return vec![Msg {
+                    header: Header {
+                        from: self.address.clone(),
+                        // TODO: We need to track the client address along the way.
+                        to: Address::new(""),
+                    },
+                    body: Body::Response(value),
+                }];
+            }
+            _ => {
+                println!("got an accept even though we aren't waiting for any");
+                return vec![];
+            }
         }
     }
 }

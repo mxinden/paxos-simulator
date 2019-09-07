@@ -21,6 +21,7 @@ pub enum Body {
     Response(Value),
     Prepare(Epoch),
     /// Promised epoch, accepted epoch, accepted value.
+    // TODO: Why not combine the two options, they never occur separately.
     Promise(Epoch, Option<Epoch>, Option<Value>),
     Propose(Epoch, Value),
     Accept(Epoch),
