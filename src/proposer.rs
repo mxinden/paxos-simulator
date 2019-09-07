@@ -70,7 +70,8 @@ impl Proposer {
                 }
             },
             Body::Promise(promised_epoch, accepted_epoch, accepted_value) => {
-                match std::mem::replace(&mut self.state, ProposerState::WaitingForRequest) {
+                let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+                match state {
                     ProposerState::WaitingForSufficientPromises(value, mut received_promises) => {
                         received_promises.push((promised_epoch, accepted_epoch, accepted_value));
 
@@ -117,7 +118,45 @@ impl Proposer {
                             .collect();
                     }
                     _ => {
+                        self.state = state;
                         println!("got a promise even though we aren't waiting for any");
+                        return vec![];
+                    }
+                }
+            }
+            Body::Accept(epoch) => {
+                let state = std::mem::replace(&mut self.state, ProposerState::WaitingForRequest);
+                match state {
+                    ProposerState::WaitingForSufficientAccepts(expected_epoch, value, count) => {
+                        if epoch != expected_epoch {
+                            panic!("got unexpected epoch");
+                        }
+
+                        let count = count + 1;
+
+                        if count < self.acceptors.len() / 2 + 1 {
+                            self.state = ProposerState::WaitingForSufficientAccepts(
+                                expected_epoch,
+                                value,
+                                count,
+                            );
+                            return vec![];
+                        }
+
+                        // TODO: Should we be increasing the epoch?
+                        self.state = ProposerState::WaitingForRequest;
+
+                        return vec![Msg {
+                            header: Header {
+                                from: self.address.clone(),
+                                // TODO: We need to track the client address along the way.
+                                to: Address::new(""),
+                            },
+                            body: Body::Response(value),
+                        }];
+                    }
+                    _ => {
+                        println!("got an accept even though we aren't waiting for any");
                         return vec![];
                     }
                 }
@@ -127,9 +166,10 @@ impl Proposer {
     }
 }
 
+#[derive(Clone, Debug)]
 enum ProposerState {
     WaitingForRequest,
     /// Value to propose and promises received so far.
     WaitingForSufficientPromises(Value, Vec<(Epoch, Option<Epoch>, Option<Value>)>),
-    WaitingForSufficientAccepts(Epoch, Value, u32),
+    WaitingForSufficientAccepts(Epoch, Value, usize),
 }

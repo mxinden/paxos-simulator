@@ -32,5 +32,13 @@ fn single_proposer_three_acceptors_one_request() {
     let mut s = simulator::Simulator::new(p, a, inbox);
     s.run().unwrap();
 
-    // TODO: Check if we got any responses.
+    assert_eq!(s.responses.len(), 1);
+    assert_eq!(s.responses[0], Msg {
+        header: Header {
+            from: Address::new("p1"),
+            // TODO: We need to track the client address along the way.
+            to: Address::new(""),
+        },
+        body: Body::Response(Value::new("v1")),
+    })
 }

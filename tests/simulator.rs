@@ -6,9 +6,10 @@ use std::collections::{HashMap, VecDeque};
 #[derive(Default)]
 pub struct Simulator {
     now: Instant,
-    pub proposers: HashMap<Address, Proposer>,
+    proposers: HashMap<Address, Proposer>,
     acceptors: HashMap<Address, Acceptor>,
     inbox: VecDeque<Msg>,
+    pub responses: Vec<Msg>,
 }
 
 impl Simulator {
@@ -27,6 +28,7 @@ impl Simulator {
             proposers,
             acceptors,
             inbox,
+            responses: vec![],
         }
     }
 
@@ -70,7 +72,7 @@ impl Simulator {
             Body::Promise(_, _, _) => self.dispatch_msg_to_proposer(m),
             Body::Propose(_, _) => self.dispatch_msg_to_acceptor(m),
             Body::Accept(_) => self.dispatch_msg_to_proposer(m),
-            Body::Response => unimplemented!(),
+            Body::Response(_) => self.responses.push(m),
         };
     }
 

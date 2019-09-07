@@ -1,24 +1,24 @@
 pub mod acceptor;
 pub mod proposer;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Msg {
     pub header: Header,
     pub body: Body,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Header {
     pub from: Address,
     pub to: Address,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Body {
     /// Request by an end-user.
     Request(Value),
     /// Response by a proposer to an end-user.
-    Response,
+    Response(Value),
     Prepare(Epoch),
     /// Promised epoch, accepted epoch, accepted value.
     Promise(Epoch, Option<Epoch>, Option<Value>),
