@@ -1,20 +1,46 @@
+use std::cmp::Ord;
+
 pub mod acceptor;
 pub mod proposer;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Msg {
     pub header: Header,
     pub body: Body,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl std::fmt::Debug for Msg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {:?}", self.header, self.body)
+    }
+}
+
+impl Ord for Msg {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.header.at.cmp(&other.header.at)
+    }
+}
+
+impl PartialOrd for Msg {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct Header {
     pub from: Address,
     pub to: Address,
     pub at: Instant,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl std::fmt::Debug for Header {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} -> {:?} at {:?}", self.from, self.to, self.at)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub enum Body {
     /// Request by an end-user.
     Request(Value),
@@ -28,8 +54,27 @@ pub enum Body {
     Accept(Epoch),
 }
 
-#[derive(Eq, Hash, Clone, Default, PartialOrd, PartialEq, Debug)]
+impl std::fmt::Debug for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Body::Request(v) => write!(f, "request({:?})", v),
+            Body::Response(v) => write!(f, "response({:?})", v),
+            Body::Prepare(e) => write!(f, "prepare({:?})", e),
+            Body::Promise(e, a) => write!(f, "promise({:?}, {:?})", e, a),
+            Body::Propose(e, v) => write!(f, "propose({:?}, {:?})", e, v),
+            Body::Accept(e) => write!(f, "accept({:?})", e),
+        }
+    }
+}
+
+#[derive(Eq, Hash, Clone, Default, PartialOrd, PartialEq)]
 pub struct Address(String);
+
+impl std::fmt::Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 
 impl Address {
     pub fn new(a: &str) -> Address {
@@ -37,8 +82,14 @@ impl Address {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Debug)]
+#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Eq, Ord)]
 pub struct Instant(pub u64);
+
+impl std::fmt::Debug for Instant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 
 impl std::ops::Add for Instant {
     type Output = Instant;
@@ -56,11 +107,23 @@ impl std::ops::Add<u64> for Instant {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Debug)]
+#[derive(Clone, Copy, Default, PartialOrd, PartialEq, Eq)]
 pub struct Epoch(u64);
 
-#[derive(Clone, Default, PartialOrd, PartialEq, Debug, Ord, Eq)]
+impl std::fmt::Debug for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+#[derive(Clone, Default, PartialOrd, PartialEq, Ord, Eq)]
 pub struct Value(String);
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 
 impl Value {
     pub fn new(v: &str) -> Self {

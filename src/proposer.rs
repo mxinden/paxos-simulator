@@ -41,7 +41,6 @@ impl Proposer {
     }
 
     fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {
-        println!("processing msg '{:?}'", m);
         match m.body {
             Body::Request(v) => self.process_request(m.header, v, now),
             Body::Promise(promised_epoch, accepted) => {
@@ -153,7 +152,7 @@ impl Proposer {
                         from: self.address.clone(),
                         // TODO: We need to track the client address along the way.
                         to: Address::new(""),
-                        at: now,
+                        at: now + 1,
                     },
                     body: Body::Response(value),
                 }];
@@ -172,7 +171,7 @@ impl Proposer {
                 header: Header {
                     from: self.address.clone(),
                     to: a.clone(),
-                    at: now,
+                    at: now + 1,
                 },
                 body: b.clone(),
             })

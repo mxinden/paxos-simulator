@@ -12,10 +12,23 @@ extern crate quickcheck_macros;
 
 #[test]
 fn single_proposer_three_acceptors_one_request() {
-    let mut s = Builder::new().with_proposers(1).with_accpetors(3).with_requests(vec![(1,0)]).build();
-
+    let mut s = Builder::new()
+        .with_proposers(1)
+        .with_accpetors(3)
+        .with_requests(vec![(1, 0)])
+        .build();
     s.run().unwrap();
+    s.ensure_correctness().unwrap();
+}
 
+#[test]
+fn two_proposer_three_acceptors_two_request() {
+    let mut s = Builder::new()
+        .with_proposers(2)
+        .with_accpetors(3)
+        .with_requests(vec![(1, 0), (2, 1)])
+        .build();
+    s.run().unwrap();
     s.ensure_correctness().unwrap();
 }
 
@@ -29,6 +42,7 @@ fn variable_requests(
     if proposers == 0 || acceptors == 0 {
         return TestResult::discard();
     }
+
     if proposers > 5 || acceptors > 5 || request_instants.len() > 5 {
         return TestResult::discard();
     }
@@ -63,7 +77,7 @@ fn variable_requests(
 pub struct Builder {
     a: HashMap<Address, Acceptor>,
     p: HashMap<Address, Proposer>,
-    r: VecDeque<Msg>,
+    r: Vec<Msg>,
 }
 
 impl Builder {
@@ -100,7 +114,7 @@ impl Builder {
             let name = format!("p{}", proposer);
             let value = format!("v{}", i);
 
-            self.r.push_back(Msg {
+            self.r.push(Msg {
                 header: Header {
                     from: Address::new("u1"),
                     to: Address::new(&name),

@@ -51,7 +51,7 @@ impl Acceptor {
                     header: Header {
                         from: self.address.clone(),
                         to: m.header.from,
-                        at: now,
+                        at: now + 1,
                     },
                     body: Body::Promise(i, self.accepted.clone()),
                 }];
@@ -71,7 +71,7 @@ impl Acceptor {
                     header: Header {
                         from: self.address.clone(),
                         to: m.header.from,
-                        at: now,
+                        at: now + 1,
                     },
                     body: Body::Accept(proposed_epoch),
                 }];
