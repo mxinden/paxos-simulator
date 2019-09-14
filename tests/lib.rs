@@ -93,10 +93,19 @@ fn variable_requests(
         ));
     }
 
-    for r in simulator.responses.iter() {
-        if r.body != Body::Response(Value::new("v1")) {
-            return TestResult::error(format!("expected 'v1' response, got '{:?}' body", r.body));
-        }
+    let final_values = simulator.responses.into_iter().map(|r| match r.body {
+        Body::Response(v) => v,
+        _ => unreachable!(),
+    }).collect::<Vec<Value>>();
+
+    println!("{:?}", final_values);
+
+    let mut unique_final_values = final_values.clone();
+    unique_final_values.sort_unstable();
+    unique_final_values.dedup();
+
+    if unique_final_values.len() > 1 {
+        return TestResult::error(format!("got more than one final result: '{:?}'", final_values));
     }
 
     TestResult::passed()
@@ -139,15 +148,17 @@ impl Builder {
     }
 
     pub fn with_requests(mut self, r: Vec<(u64, u32)>) -> Builder {
-        for (instant, proposer) in r.iter() {
+        for (i, (instant, proposer)) in r.iter().enumerate() {
             let name = format!("p{}", proposer);
+            let value = format!("v{}", i);
+
             self.r.push_back(Msg {
                 header: Header {
                     from: Address::new("u1"),
                     to: Address::new(&name),
                     at: Instant(*instant),
                 },
-                body: Body::Request(Value::new("v1")),
+                body: Body::Request(Value::new(&value)),
             });
         }
 

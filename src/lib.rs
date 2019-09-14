@@ -59,7 +59,7 @@ impl std::ops::Add<u64> for Instant {
 #[derive(Clone, Copy, Default, PartialOrd, PartialEq, Debug)]
 pub struct Epoch(u64);
 
-#[derive(Clone, Default, PartialOrd, PartialEq, Debug)]
+#[derive(Clone, Default, PartialOrd, PartialEq, Debug, Ord, Eq)]
 pub struct Value(String);
 
 impl Value {
