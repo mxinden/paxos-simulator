@@ -2,9 +2,10 @@ use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
 use std::collections::VecDeque;
 
 /// A sequential proposer, handling a single request at a time.
+#[derive(Debug)]
 pub struct Proposer {
     address: Address,
-    acceptors: Vec<Address>,
+    pub acceptors: Vec<Address>,
     inbox: VecDeque<Msg>,
     current_epoch: Epoch,
     state: ProposerState,

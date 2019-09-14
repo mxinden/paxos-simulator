@@ -11,3 +11,4 @@ edition = "2018"
 [dev-dependencies]
 quickcheck = "*"
 quickcheck_macros = "*"
+rand = "*"

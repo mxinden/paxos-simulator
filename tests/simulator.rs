@@ -3,7 +3,7 @@ use paxos_simulator::proposer::Proposer;
 use paxos_simulator::{Address, Body, Instant, Msg};
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Simulator {
     now: Instant,
     proposers: HashMap<Address, Proposer>,
@@ -23,13 +23,17 @@ impl Simulator {
             proposers.len(),
             acceptors.len()
         );
-        Simulator {
+        let s = Simulator {
             now: Default::default(),
             proposers,
             acceptors,
             inbox,
             responses: vec![],
-        }
+        };
+
+        println!("{:?}", s);
+
+        return s;
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
@@ -77,6 +81,7 @@ impl Simulator {
     }
 
     fn dispatch_msg_to_proposer(&mut self, m: Msg) {
+        println!("dispatching {:?}", m);
         self.proposers.get_mut(&m.header.to).unwrap().receive(m);
     }
 

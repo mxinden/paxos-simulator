@@ -1,7 +1,7 @@
 use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
 use std::collections::VecDeque;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Acceptor {
     address: Address,
     promised_epoch: Option<Epoch>,
@@ -10,8 +10,17 @@ pub struct Acceptor {
 }
 
 impl Acceptor {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(address: Address) -> Self {
+        Acceptor{
+            address,
+            promised_epoch: None,
+            accepted: None,
+            inbox: VecDeque::new(),
+        }
+    }
+
+    pub fn address(&self) -> Address {
+        self.address.clone()
     }
 
     /// Receive adds the given message to the incoming-messages buffer. It is

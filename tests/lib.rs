@@ -1,9 +1,11 @@
-use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Value, Instant};
+use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Instant, Value};
 use paxos_simulator::{Body, Header, Msg};
-use std::collections::{HashMap, VecDeque};
 use quickcheck::TestResult;
+use rand::Rng;
+use rand::{rngs::StdRng, SeedableRng};
+use std::collections::{HashMap, VecDeque};
 
-mod simulator;
+pub mod simulator;
 
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
@@ -18,12 +20,12 @@ extern crate quickcheck_macros;
 //             vec![Address::new("a1"), Address::new("a2"), Address::new("a3")],
 //         ),
 //     );
-// 
+//
 //     let mut a = HashMap::new();
 //     a.insert(Address::new("a1"), Acceptor::new());
 //     a.insert(Address::new("a2"), Acceptor::new());
 //     a.insert(Address::new("a3"), Acceptor::new());
-// 
+//
 //     let mut inbox = VecDeque::new();
 //     inbox.push_back(Msg {
 //         header: Header {
@@ -33,10 +35,10 @@ extern crate quickcheck_macros;
 //         },
 //         body: Body::Request(Value::new("v1")),
 //     });
-// 
+//
 //     let mut s = simulator::Simulator::new(p, a, inbox);
 //     s.run().unwrap();
-// 
+//
 //     assert_eq!(s.responses.len(), 1);
 //     assert_eq!(s.responses[0], Msg {
 //         header: Header {
@@ -50,49 +52,119 @@ extern crate quickcheck_macros;
 // }
 
 #[quickcheck]
-fn variable_requests(request_instants: Vec<u64>) -> TestResult {
-    if request_instants.len() > 50 {
+fn variable_requests(
+    proposers: u32,
+    acceptors: u32,
+    request_instants: Vec<u64>,
+    seed: u64,
+) -> TestResult {
+    if proposers == 0 || acceptors == 0 {
+        return TestResult::discard();
+    }
+    if proposers > 5 || acceptors > 5 || request_instants.len() > 5 {
         return TestResult::discard();
     }
 
-    let mut p = HashMap::new();
-    p.insert(
-        Address::new("p1"),
-        Proposer::new(
-            Address::new("p1"),
-            vec![Address::new("a1"), Address::new("a2"), Address::new("a3")],
-        ),
+    println!(
+        "test with {}, {}, {:?}",
+        proposers, acceptors, request_instants
     );
 
-    let mut a = HashMap::new();
-    a.insert(Address::new("a1"), Acceptor::new());
-    a.insert(Address::new("a2"), Acceptor::new());
-    a.insert(Address::new("a3"), Acceptor::new());
+    let mut rng = StdRng::seed_from_u64(seed);
 
-    let mut inbox = VecDeque::new();
-    for instant in request_instants.iter() {
-        inbox.push_back(Msg {
-            header: Header {
-                from: Address::new("u1"),
-                to: Address::new("p1"),
-                at: Instant(*instant),
-            },
-            body: Body::Request(Value::new("v1")),
-        });
+    let requests = request_instants
+        .iter()
+        .map(|i| (*i, rng.gen_range(0, proposers)))
+        .collect();
+
+    let mut simulator = Builder::new()
+        .with_proposers(proposers)
+        .with_accpetors(acceptors)
+        .with_requests(requests)
+        .build();
+
+    simulator.run().unwrap();
+
+    if simulator.responses.len() != request_instants.len() {
+        return TestResult::error(format!(
+            "expected {} responses, got {} responses",
+            simulator.responses.len(),
+            request_instants.len()
+        ));
     }
 
-    let mut s = simulator::Simulator::new(p, a, inbox);
-    s.run().unwrap();
-
-    if s.responses.len() != request_instants.len() {
-        return TestResult::error(format!("expected {} responses, got {} responses", s.responses.len(), request_instants.len()));
-    }
-
-    for r in s.responses.iter() {
+    for r in simulator.responses.iter() {
         if r.body != Body::Response(Value::new("v1")) {
             return TestResult::error(format!("expected 'v1' response, got '{:?}' body", r.body));
         }
     }
 
     TestResult::passed()
+}
+
+#[derive(Default)]
+pub struct Builder {
+    a: HashMap<Address, Acceptor>,
+    p: HashMap<Address, Proposer>,
+    r: VecDeque<Msg>,
+}
+
+impl Builder {
+    pub fn new() -> Builder {
+        Builder::default()
+    }
+
+    pub fn with_proposers(mut self, size: u32) -> Builder {
+        for i in 0..size {
+            let name = format!("p{}", i);
+
+            self.p.insert(
+                Address::new(&name),
+                Proposer::new(Address::new(&name), vec![]),
+            );
+        }
+
+        self
+    }
+
+    pub fn with_accpetors(mut self, size: u32) -> Builder {
+        for i in 0..size {
+            let name = format!("a{}", i);
+
+            self.a
+                .insert(Address::new(&name), Acceptor::new(Address::new(&name)));
+        }
+
+        self
+    }
+
+    pub fn with_requests(mut self, r: Vec<(u64, u32)>) -> Builder {
+        for (instant, proposer) in r.iter() {
+            let name = format!("p{}", proposer);
+            self.r.push_back(Msg {
+                header: Header {
+                    from: Address::new("u1"),
+                    to: Address::new(&name),
+                    at: Instant(*instant),
+                },
+                body: Body::Request(Value::new("v1")),
+            });
+        }
+
+        self
+    }
+
+    pub fn build(self) -> simulator::Simulator {
+        let a_addresses: Vec<Address> = self.a.iter().map(|(_, a)| a.address()).collect();
+        let p = self
+            .p
+            .into_iter()
+            .map(|(address, mut proposer)| {
+                proposer.acceptors = a_addresses.clone();
+                (address, proposer)
+            })
+            .collect();
+
+        simulator::Simulator::new(p, self.a, self.r)
+    }
 }
