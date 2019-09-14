@@ -20,7 +20,7 @@ impl Acceptor {
         self.inbox.push_back(m);
     }
 
-    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
+    pub fn process(&mut self, _now: Instant) -> Vec<Msg> {
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
         messages
             .into_iter()
@@ -43,14 +43,15 @@ impl Acceptor {
                         from: self.address.clone(),
                         to: m.header.from,
                     },
-                    body: Body::Promise(
-                        i,
-                        self.accepted.clone(),
-                    ),
+                    body: Body::Promise(i, self.accepted.clone()),
                 }];
             }
             Body::Propose(proposed_epoch, value) => {
-                if self.promised_epoch.map(|e| e > proposed_epoch).unwrap_or(false) {
+                if self
+                    .promised_epoch
+                    .map(|e| e > proposed_epoch)
+                    .unwrap_or(false)
+                {
                     return vec![];
                 }
 
@@ -61,11 +62,8 @@ impl Acceptor {
                         from: self.address.clone(),
                         to: m.header.from,
                     },
-                    body: Body::Accept(
-                        proposed_epoch,
-                    ),
+                    body: Body::Accept(proposed_epoch),
                 }];
-
             }
             _ => unimplemented!(),
         }

@@ -1,6 +1,6 @@
 use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
-use paxos_simulator::{Address, Body, Header, Instant, Msg};
+use paxos_simulator::{Address, Body, Instant, Msg};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Default)]
@@ -33,7 +33,7 @@ impl Simulator {
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
-        while (self.inbox.len() != 0 && self.now < Instant(100)) {
+        while self.inbox.len() != 0 && self.now < Instant(100) {
             self.tick()
         }
 

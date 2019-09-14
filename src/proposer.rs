@@ -7,7 +7,6 @@ pub struct Proposer {
     acceptors: Vec<Address>,
     inbox: VecDeque<Msg>,
     current_epoch: Epoch,
-    max_epoch_received: Option<Epoch>,
     state: ProposerState,
 }
 
@@ -20,7 +19,6 @@ impl Proposer {
             // TODO: This way all proposers start with the same epoch. Is that a
             // good idea?
             current_epoch: Epoch::default(),
-            max_epoch_received: None,
             state: ProposerState::Idle,
         }
     }
@@ -32,7 +30,7 @@ impl Proposer {
     }
 
     // TODO: Implement timeout mechanism.
-    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
+    pub fn process(&mut self, _now: Instant) -> Vec<Msg> {
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
         messages
             .into_iter()
@@ -165,8 +163,7 @@ impl Proposer {
     }
 
     fn to_all_acceptors(&mut self, b: Body) -> Vec<Msg> {
-        self
-            .acceptors
+        self.acceptors
             .iter()
             .map(|a| Msg {
                 header: Header {
