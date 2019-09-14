@@ -107,12 +107,23 @@ impl std::ops::Add<u64> for Instant {
     }
 }
 
+/// Epoch is a tuple of an increasing epoch counter and a proposer specific
+/// identifier to partition the global epoch set among proposers.
 #[derive(Clone, Copy, Default, PartialOrd, PartialEq, Eq)]
-pub struct Epoch(u64);
+pub struct Epoch{
+    pub epoch: u32,
+    pub identifier: u32,
+}
 
 impl std::fmt::Debug for Epoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
+        write!(f, "{:?}-{:?}", self.epoch, self.identifier)
+    }
+}
+
+impl Epoch {
+    pub fn new(epoch: u32, identifier: u32) -> Epoch {
+        Epoch { epoch, identifier }
     }
 }
 

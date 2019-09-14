@@ -1,4 +1,4 @@
-use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Instant, Value};
+use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Epoch, Instant, Value};
 use paxos_simulator::{Body, Header, Msg};
 use quickcheck::TestResult;
 use rand::Rng;
@@ -91,7 +91,7 @@ impl Builder {
 
             self.p.insert(
                 Address::new(&name),
-                Proposer::new(Address::new(&name), vec![]),
+                Proposer::new(Address::new(&name), Epoch::new(0, i), vec![]),
             );
         }
 

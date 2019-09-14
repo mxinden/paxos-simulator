@@ -12,14 +12,14 @@ pub struct Proposer {
 }
 
 impl Proposer {
-    pub fn new(address: Address, acceptors: Vec<Address>) -> Self {
+    pub fn new(address: Address, initial_epoch: Epoch, acceptors: Vec<Address>) -> Self {
         Self {
             address,
             acceptors,
             inbox: Default::default(),
             // TODO: This way all proposers start with the same epoch. Is that a
             // good idea?
-            current_epoch: Epoch::default(),
+            current_epoch: initial_epoch,
             state: ProposerState::Idle,
         }
     }
