@@ -20,16 +20,16 @@ impl Acceptor {
         self.inbox.push_back(m);
     }
 
-    pub fn process(&mut self, _now: Instant) -> Vec<Msg> {
+    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
         messages
             .into_iter()
-            .map(|m| self.process_msg(m))
+            .map(|m| self.process_msg(m, now))
             .flatten()
             .collect()
     }
 
-    fn process_msg(&mut self, m: Msg) -> Vec<Msg> {
+    fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {
         match m.body {
             Body::Prepare(i) => {
                 if self.promised_epoch.map(|e| e > i).unwrap_or(false) {
@@ -42,6 +42,7 @@ impl Acceptor {
                     header: Header {
                         from: self.address.clone(),
                         to: m.header.from,
+                        at: now,
                     },
                     body: Body::Promise(i, self.accepted.clone()),
                 }];
@@ -61,6 +62,7 @@ impl Acceptor {
                     header: Header {
                         from: self.address.clone(),
                         to: m.header.from,
+                        at: now,
                     },
                     body: Body::Accept(proposed_epoch),
                 }];

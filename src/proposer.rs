@@ -30,28 +30,28 @@ impl Proposer {
     }
 
     // TODO: Implement timeout mechanism.
-    pub fn process(&mut self, _now: Instant) -> Vec<Msg> {
+    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
         messages
             .into_iter()
-            .map(|m| self.process_msg(m))
+            .map(|m| self.process_msg(m, now))
             .flatten()
             .collect()
     }
 
-    fn process_msg(&mut self, m: Msg) -> Vec<Msg> {
+    fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {
         println!("processing msg '{:?}'", m);
         match m.body {
-            Body::Request(v) => self.process_request(m.header, v),
+            Body::Request(v) => self.process_request(m.header, v, now),
             Body::Promise(promised_epoch, accepted) => {
-                self.process_promise(promised_epoch, accepted)
+                self.process_promise(promised_epoch, accepted, now)
             }
-            Body::Accept(epoch) => self.process_accept(epoch),
+            Body::Accept(epoch) => self.process_accept(epoch, now),
             Body::Prepare(_) | Body::Propose(_, _) | Body::Response(_) => unimplemented!(),
         }
     }
 
-    fn process_request(&mut self, header: Header, value: Value) -> Vec<Msg> {
+    fn process_request(&mut self, header: Header, value: Value, now: Instant) -> Vec<Msg> {
         match self.state {
             ProposerState::Preparing { .. } | ProposerState::Proposing(_, _, _) => {
                 println!("already got a request in flight, delaying new one");
@@ -70,7 +70,7 @@ impl Proposer {
 
                 let body = Body::Prepare(self.current_epoch.clone());
 
-                self.to_all_acceptors(body)
+                self.to_all_acceptors(body, now)
             }
         }
     }
@@ -79,6 +79,7 @@ impl Proposer {
         &mut self,
         promised_epoch: Epoch,
         accepted: Option<(Epoch, Value)>,
+        now: Instant,
     ) -> Vec<Msg> {
         let state = std::mem::replace(&mut self.state, ProposerState::Idle);
         match state {
@@ -123,12 +124,12 @@ impl Proposer {
 
                 let propose_body = Body::Propose(epoch, value);
 
-                self.to_all_acceptors(propose_body)
+                self.to_all_acceptors(propose_body, now)
             }
         }
     }
 
-    fn process_accept(&mut self, epoch: Epoch) -> Vec<Msg> {
+    fn process_accept(&mut self, epoch: Epoch, now: Instant) -> Vec<Msg> {
         let state = std::mem::replace(&mut self.state, ProposerState::Idle);
         match state {
             ProposerState::Proposing(expected_epoch, value, count) => {
@@ -151,6 +152,7 @@ impl Proposer {
                         from: self.address.clone(),
                         // TODO: We need to track the client address along the way.
                         to: Address::new(""),
+                        at: now,
                     },
                     body: Body::Response(value),
                 }];
@@ -162,13 +164,14 @@ impl Proposer {
         }
     }
 
-    fn to_all_acceptors(&mut self, b: Body) -> Vec<Msg> {
+    fn to_all_acceptors(&mut self, b: Body, now: Instant) -> Vec<Msg> {
         self.acceptors
             .iter()
             .map(|a| Msg {
                 header: Header {
                     from: self.address.clone(),
                     to: a.clone(),
+                    at: now,
                 },
                 body: b.clone(),
             })

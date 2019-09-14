@@ -1,4 +1,4 @@
-use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Value};
+use paxos_simulator::{acceptor::Acceptor, proposer::Proposer, Address, Value, Instant};
 use paxos_simulator::{Body, Header, Msg};
 use std::collections::{HashMap, VecDeque};
 
@@ -25,6 +25,7 @@ fn single_proposer_three_acceptors_one_request() {
         header: Header {
             from: Address::new("u1"),
             to: Address::new("p1"),
+            at: Instant(1),
         },
         body: Body::Request(Value::new("v1")),
     });
@@ -38,6 +39,7 @@ fn single_proposer_three_acceptors_one_request() {
             from: Address::new("p1"),
             // TODO: We need to track the client address along the way.
             to: Address::new(""),
+            at: Instant(5),
         },
         body: Body::Response(Value::new("v1")),
     })

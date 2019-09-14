@@ -11,6 +11,7 @@ pub struct Msg {
 pub struct Header {
     pub from: Address,
     pub to: Address,
+    pub at: Instant,
 }
 
 #[derive(Clone, Debug, PartialEq)]
