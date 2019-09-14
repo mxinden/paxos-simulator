@@ -1,6 +1,6 @@
 use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
-use paxos_simulator::{Address, Body, Instant, Msg};
+use paxos_simulator::{Address, Body, Instant, Msg, Value};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Default, Debug)]
@@ -9,7 +9,8 @@ pub struct Simulator {
     proposers: HashMap<Address, Proposer>,
     acceptors: HashMap<Address, Acceptor>,
     inbox: VecDeque<Msg>,
-    pub responses: Vec<Msg>,
+    responses: Vec<Msg>,
+    amount_requests: usize,
 }
 
 impl Simulator {
@@ -18,22 +19,15 @@ impl Simulator {
         acceptors: HashMap<Address, Acceptor>,
         inbox: VecDeque<Msg>,
     ) -> Simulator {
-        println!(
-            "new simulator with {} proposers and {} acceptors",
-            proposers.len(),
-            acceptors.len()
-        );
-        let s = Simulator {
+        let amount_requests = inbox.len();
+        Simulator {
             now: Default::default(),
             proposers,
             acceptors,
             inbox,
             responses: vec![],
-        };
-
-        println!("{:?}", s);
-
-        return s;
+            amount_requests,
+        }
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
@@ -87,5 +81,32 @@ impl Simulator {
 
     fn dispatch_msg_to_acceptor(&mut self, m: Msg) {
         self.acceptors.get_mut(&m.header.to).unwrap().receive(m);
+    }
+
+    pub fn ensure_correctness(&self) -> Result<(), String> {
+        if self.responses.len() != self.amount_requests {
+            return Err(format!(
+                "expected {} responses, got {} responses",
+                self.amount_requests,
+                self.responses.len(),
+            ));
+        }
+
+        let final_values = self.responses.iter().map(|r| match &r.body {
+            Body::Response(v) => v.clone(),
+            _ => unreachable!(),
+        }).collect::<Vec<Value>>();
+
+        println!("{:?}", final_values);
+
+        let mut unique_final_values = final_values.clone();
+        unique_final_values.sort_unstable();
+        unique_final_values.dedup();
+
+        if unique_final_values.len() > 1 {
+            return Err(format!("got more than one final result: '{:?}'", final_values));
+        }
+
+        Ok(())
     }
 }

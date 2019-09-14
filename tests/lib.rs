@@ -10,46 +10,14 @@ pub mod simulator;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
-// #[test]
-// fn single_proposer_three_acceptors_one_request() {
-//     let mut p = HashMap::new();
-//     p.insert(
-//         Address::new("p1"),
-//         Proposer::new(
-//             Address::new("p1"),
-//             vec![Address::new("a1"), Address::new("a2"), Address::new("a3")],
-//         ),
-//     );
-//
-//     let mut a = HashMap::new();
-//     a.insert(Address::new("a1"), Acceptor::new());
-//     a.insert(Address::new("a2"), Acceptor::new());
-//     a.insert(Address::new("a3"), Acceptor::new());
-//
-//     let mut inbox = VecDeque::new();
-//     inbox.push_back(Msg {
-//         header: Header {
-//             from: Address::new("u1"),
-//             to: Address::new("p1"),
-//             at: Instant(1),
-//         },
-//         body: Body::Request(Value::new("v1")),
-//     });
-//
-//     let mut s = simulator::Simulator::new(p, a, inbox);
-//     s.run().unwrap();
-//
-//     assert_eq!(s.responses.len(), 1);
-//     assert_eq!(s.responses[0], Msg {
-//         header: Header {
-//             from: Address::new("p1"),
-//             // TODO: We need to track the client address along the way.
-//             to: Address::new(""),
-//             at: Instant(5),
-//         },
-//         body: Body::Response(Value::new("v1")),
-//     })
-// }
+#[test]
+fn single_proposer_three_acceptors_one_request() {
+    let mut s = Builder::new().with_proposers(1).with_accpetors(3).with_requests(vec![(1,0)]).build();
+
+    s.run().unwrap();
+
+    s.ensure_correctness().unwrap();
+}
 
 #[quickcheck]
 fn variable_requests(
@@ -85,30 +53,10 @@ fn variable_requests(
 
     simulator.run().unwrap();
 
-    if simulator.responses.len() != request_instants.len() {
-        return TestResult::error(format!(
-            "expected {} responses, got {} responses",
-            simulator.responses.len(),
-            request_instants.len()
-        ));
+    match simulator.ensure_correctness() {
+        Ok(()) => TestResult::passed(),
+        Err(e) => TestResult::error(e),
     }
-
-    let final_values = simulator.responses.into_iter().map(|r| match r.body {
-        Body::Response(v) => v,
-        _ => unreachable!(),
-    }).collect::<Vec<Value>>();
-
-    println!("{:?}", final_values);
-
-    let mut unique_final_values = final_values.clone();
-    unique_final_values.sort_unstable();
-    unique_final_values.dedup();
-
-    if unique_final_values.len() > 1 {
-        return TestResult::error(format!("got more than one final result: '{:?}'", final_values));
-    }
-
-    TestResult::passed()
 }
 
 #[derive(Default)]
