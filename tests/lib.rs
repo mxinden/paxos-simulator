@@ -32,6 +32,35 @@ fn two_proposer_three_acceptors_two_request() {
     s.ensure_correctness().unwrap();
 }
 
+#[test]
+fn regression_1() {
+    let request_instants = vec![
+        10, 64, 10, 64, 64, 10, 64, 10, 64, 10, 64, 64, 10, 10, 10, 10, 64, 6, 64,
+    ];
+    let mut rng = StdRng::seed_from_u64(0);
+    let requests = request_instants
+        .iter()
+        .map(|i| (*i, rng.gen_range(0, 1)))
+        .collect();
+
+    let mut s = Builder::new()
+        .with_proposers(1)
+        .with_accpetors(3)
+        .with_requests(requests)
+        .build();
+    s.run().unwrap();
+
+    match s.ensure_correctness() {
+        Ok(()) => {},
+        Err(e) => {
+            for l in s.log.iter() {
+                println!("{}", l);
+            }
+            panic!(e);
+        }
+    }
+}
+
 #[quickcheck]
 fn variable_requests(
     proposers: u32,
@@ -43,14 +72,9 @@ fn variable_requests(
         return TestResult::discard();
     }
 
-    if proposers > 5 || acceptors > 5 || request_instants.len() > 5 {
+    if proposers > 10 || acceptors > 10 || request_instants.len() > 100 {
         return TestResult::discard();
     }
-
-    println!(
-        "test with {}, {}, {:?}",
-        proposers, acceptors, request_instants
-    );
 
     let mut rng = StdRng::seed_from_u64(seed);
 
@@ -69,7 +93,12 @@ fn variable_requests(
 
     match simulator.ensure_correctness() {
         Ok(()) => TestResult::passed(),
-        Err(e) => TestResult::error(e),
+        Err(e) => {
+            for l in simulator.log.iter() {
+                println!("{}", l);
+            }
+            TestResult::error(e)
+        }
     }
 }
 

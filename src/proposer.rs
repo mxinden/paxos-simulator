@@ -1,6 +1,8 @@
 use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
 use std::collections::VecDeque;
 
+const TIMEOUT: Instant = Instant(5);
+
 /// A sequential proposer, handling a single request at a time.
 #[derive(Debug)]
 pub struct Proposer {
@@ -30,14 +32,44 @@ impl Proposer {
         self.inbox.push_back(m);
     }
 
-    // TODO: Implement timeout mechanism.
     pub fn process(&mut self, now: Instant) -> Vec<Msg> {
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
-        messages
+        let responses: Vec<Msg> = messages
             .into_iter()
             .map(|m| self.process_msg(m, now))
             .flatten()
-            .collect()
+            .collect();
+        if responses.len() != 0 {
+            return responses;
+        }
+
+        // Go back to /preparing/ on timeout.
+        if self
+            .state
+            .last_progress_at()
+            .map(|t| now - t > TIMEOUT)
+            .unwrap_or(false)
+        {
+            self.current_epoch =
+                Epoch::new(self.current_epoch.epoch + 1, self.current_epoch.identifier);
+
+            let value = self
+                .state
+                .value()
+                .expect("can't be reached from idle state, thus there is a value");
+
+            self.state = ProposerState::Preparing {
+                last_progress_at: now,
+                value: value,
+                promises: vec![],
+            };
+
+            let body = Body::Prepare(self.current_epoch.clone());
+
+            return self.to_all_acceptors(body, now);
+        }
+
+        vec![]
     }
 
     fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {
@@ -53,8 +85,8 @@ impl Proposer {
 
     fn process_request(&mut self, header: Header, value: Value, now: Instant) -> Vec<Msg> {
         match self.state {
-            ProposerState::Preparing { .. } | ProposerState::Proposing(_, _, _) => {
-                println!("already got a request in flight, delaying new one");
+            ProposerState::Unreachable => unreachable!(),
+            ProposerState::Preparing { .. } | ProposerState::Proposing { .. } => {
                 self.inbox.push_back(Msg {
                     header,
                     body: Body::Request(value),
@@ -63,8 +95,8 @@ impl Proposer {
             }
             ProposerState::Idle => {
                 self.state = ProposerState::Preparing {
-                    initial_e: self.current_epoch.clone(),
-                    initial_v: value,
+                    last_progress_at: now,
+                    value,
                     promises: vec![],
                 };
 
@@ -81,17 +113,17 @@ impl Proposer {
         accepted: Option<(Epoch, Value)>,
         now: Instant,
     ) -> Vec<Msg> {
-        let state = std::mem::replace(&mut self.state, ProposerState::Idle);
+        let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
         match state {
-            ProposerState::Idle | ProposerState::Proposing(_, _, _) => {
+            ProposerState::Unreachable => unreachable!(),
+            ProposerState::Idle | ProposerState::Proposing { .. } => {
                 self.state = state;
-                println!("got a promise even though we aren't waiting for any");
                 return vec![];
             }
             ProposerState::Preparing {
-                initial_e,
-                initial_v,
+                value,
                 mut promises,
+                ..
             } => {
                 promises.push(Promise {
                     epoch: promised_epoch,
@@ -99,30 +131,38 @@ impl Proposer {
                 });
 
                 if promises.len() < self.acceptors.len() / 2 + 1 {
-                    println!("not a majority yet");
                     self.state = ProposerState::Preparing {
-                        initial_e,
-                        initial_v,
+                        last_progress_at: now,
+                        value,
                         promises,
                     };
                     return vec![];
                 }
 
-                // Let's determine if we got promises for our proposal, or
-                // if there was something higher.
-                let (epoch, value) = promises.into_iter().fold(
-                    (initial_e, initial_v),
-                    |(accu_e, accu_v), Promise { accepted, .. }| -> (Epoch, Value) {
-                        if accepted.clone().map(|(e, _)| e > accu_e).unwrap_or(false) {
-                            return accepted.unwrap();
-                        }
-                        (accu_e, accu_v)
-                    },
-                );
+                let highest_accepted: Option<(Epoch, Value)> =
+                    promises
+                        .into_iter()
+                        .fold(None, |highest, Promise { accepted, .. }| match highest {
+                            Some((h_e, h_v)) => match accepted {
+                                Some((a_e, a_v)) => {
+                                    if h_e > a_e {
+                                        Some((h_e, h_v))
+                                    } else {
+                                        Some((a_e, a_v))
+                                    }
+                                }
+                                None => Some((h_e, h_v)),
+                            },
+                            None => accepted,
+                        });
 
-                self.state = ProposerState::Proposing(epoch, value.clone(), 0);
+                self.state = ProposerState::Proposing {
+                    last_progress_at: now,
+                    value: highest_accepted.map(|a| a.1).unwrap_or(value),
+                    received_accepts: 0,
+                };
 
-                let propose_body = Body::Propose(epoch, value);
+                let propose_body = Body::Propose(self.current_epoch, self.state.value().unwrap());
 
                 self.to_all_acceptors(propose_body, now)
             }
@@ -130,21 +170,31 @@ impl Proposer {
     }
 
     fn process_accept(&mut self, epoch: Epoch, now: Instant) -> Vec<Msg> {
-        let state = std::mem::replace(&mut self.state, ProposerState::Idle);
+        let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
         match state {
-            ProposerState::Proposing(expected_epoch, value, count) => {
-                if epoch != expected_epoch {
-                    panic!("got unexpected epoch");
-                }
+            ProposerState::Unreachable => unimplemented!(),
+            ProposerState::Idle | ProposerState::Preparing { .. } => {
+                self.state = state;
+                return vec![];
+            }
+            ProposerState::Proposing {
+                value,
+                received_accepts,
+                ..
+            } => {
+                let received_accepts = received_accepts + 1;
 
-                let count = count + 1;
-
-                if count < self.acceptors.len() / 2 + 1 {
-                    self.state = ProposerState::Proposing(expected_epoch, value, count);
+                if received_accepts < self.acceptors.len() / 2 + 1 {
+                    self.state = ProposerState::Proposing {
+                        value,
+                        received_accepts,
+                        last_progress_at: now,
+                    };
                     return vec![];
                 }
 
-                // TODO: Should we be increasing the epoch?
+                self.current_epoch =
+                    Epoch::new(self.current_epoch.epoch + 1, self.current_epoch.identifier);
                 self.state = ProposerState::Idle;
 
                 return vec![Msg {
@@ -156,10 +206,6 @@ impl Proposer {
                     },
                     body: Body::Response(value),
                 }];
-            }
-            _ => {
-                println!("got an accept even though we aren't waiting for any");
-                return vec![];
             }
         }
     }
@@ -184,11 +230,40 @@ enum ProposerState {
     Idle,
     /// Epoch and value to propose and promises received so far.
     Preparing {
-        initial_e: Epoch,
-        initial_v: Value,
+        last_progress_at: Instant,
+        value: Value,
         promises: Vec<Promise>,
     },
-    Proposing(Epoch, Value, usize),
+    Proposing {
+        last_progress_at: Instant,
+        value: Value,
+        received_accepts: usize,
+    },
+    Unreachable,
+}
+
+impl ProposerState {
+    fn last_progress_at(&self) -> Option<Instant> {
+        match self {
+            ProposerState::Unreachable => unreachable!(),
+            ProposerState::Idle => None,
+            ProposerState::Preparing {
+                last_progress_at, ..
+            } => Some(*last_progress_at),
+            ProposerState::Proposing {
+                last_progress_at, ..
+            } => Some(*last_progress_at),
+        }
+    }
+
+    fn value(&self) -> Option<Value> {
+        match self {
+            ProposerState::Unreachable => unreachable!(),
+            ProposerState::Idle => None,
+            ProposerState::Preparing { value, .. } => Some(value.clone()),
+            ProposerState::Proposing { value, .. } => Some(value.clone()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -107,6 +107,14 @@ impl std::ops::Add<u64> for Instant {
     }
 }
 
+impl std::ops::Sub for Instant {
+    type Output = Instant;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
 /// Epoch is a tuple of an increasing epoch counter and a proposer specific
 /// identifier to partition the global epoch set among proposers.
 #[derive(Clone, Copy, Default, PartialOrd, PartialEq, Eq)]

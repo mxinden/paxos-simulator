@@ -3,6 +3,9 @@ use paxos_simulator::proposer::Proposer;
 use paxos_simulator::{Address, Body, Instant, Msg, Value};
 use std::collections::{HashMap, VecDeque};
 
+// Needs to be larger than proposer.rs/TIMEOUT.
+const TIMEOUT: Instant = Instant(10);
+
 #[derive(Default, Debug)]
 pub struct Simulator {
     now: Instant,
@@ -11,6 +14,14 @@ pub struct Simulator {
     inbox: Vec<Msg>,
     responses: Vec<Msg>,
     amount_requests: usize,
+    // The simulator needs to be able to determine when the simulation is done,
+    // thus not making any more progress. One could terminate once no messages
+    // are being transferred anymore. But this would break proposer timeouts.
+    // Instead let's wait a bit longer once there are no more messages.
+    // `last_progress_at` is there to track the above.
+    last_progress_at: Instant,
+    /// Log lines collected to be printed on failure.
+    pub log: Vec<String>,
 }
 
 impl Simulator {
@@ -22,17 +33,38 @@ impl Simulator {
         let amount_requests = inbox.len();
         Simulator {
             now: Default::default(),
+            last_progress_at: Default::default(),
             proposers,
             acceptors,
             inbox,
             responses: vec![],
             amount_requests,
+            log: Default::default(),
         }
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
-        while self.inbox.len() != 0 && self.now < Instant(100) {
-            self.tick()
+        self.log.push(format!(
+            "=== New simulation | proposers: {} | acceptors: {} | initial inbox: {}",
+            self.proposers.len(),
+            self.acceptors.len(),
+            self.inbox.len()
+        ));
+
+        println!("inbox: {:?}", self.inbox);
+
+        loop {
+            self.tick();
+
+            // Check if there is any progress.
+            if self.inbox.len() == 0 && self.now - self.last_progress_at > TIMEOUT {
+                break;
+            }
+
+            // Safety measure to prevent infinite loops.
+            if self.now > Instant(100000) {
+                break;
+            }
         }
 
         Ok(())
@@ -40,19 +72,24 @@ impl Simulator {
 
     fn tick(&mut self) {
         self.now = self.now + 1;
-        println!("tick {:?}", self.now);
-        println!("simulator inbox len {}", self.inbox.len());
+        self.log.push(format!("tick {:?}", self.now));
 
+        // Dispatch messages.
         self.inbox.sort_unstable();
-
         self.dispatch_msgs();
 
+        // Have entities process messages.
         let mut new_msgs = vec![];
         for (_, p) in self.proposers.iter_mut() {
             new_msgs.append(&mut p.process(self.now));
         }
         for (_, a) in self.acceptors.iter_mut() {
             new_msgs.append(&mut a.process(self.now));
+        }
+
+        // Producing new messages is equal to overall progress.
+        if new_msgs.len() != 0 {
+            self.last_progress_at = self.now;
         }
 
         self.inbox.append(&mut new_msgs.into_iter().collect());
@@ -66,7 +103,7 @@ impl Simulator {
             .unwrap_or(false)
         {
             let m = self.inbox.remove(0);
-            println!("dispatching msg '{:?}'", m);
+            self.log.push(format!("dispatching msg '{:?}'", m));
             self.dispatch_msg(m);
         }
     }
