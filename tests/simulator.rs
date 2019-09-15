@@ -1,7 +1,7 @@
 use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
 use paxos_simulator::{Address, Body, Instant, Msg, Value};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 // Needs to be larger than proposer.rs/TIMEOUT.
 const TIMEOUT: Instant = Instant(10);

@@ -3,7 +3,7 @@ use paxos_simulator::{Body, Header, Msg};
 use quickcheck::TestResult;
 use rand::Rng;
 use rand::{rngs::StdRng, SeedableRng};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 pub mod simulator;
 
@@ -51,7 +51,7 @@ fn regression_1() {
     s.run().unwrap();
 
     match s.ensure_correctness() {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) => {
             for l in s.log.iter() {
                 println!("{}", l);

@@ -9,7 +9,7 @@ pub struct Proposer {
     address: Address,
     pub acceptors: Vec<Address>,
     inbox: VecDeque<Msg>,
-    current_epoch: Epoch,
+    epoch: Epoch,
     state: ProposerState,
 }
 
@@ -19,9 +19,7 @@ impl Proposer {
             address,
             acceptors,
             inbox: Default::default(),
-            // TODO: This way all proposers start with the same epoch. Is that a
-            // good idea?
-            current_epoch: initial_epoch,
+            epoch: initial_epoch,
             state: ProposerState::Idle,
         }
     }
@@ -39,37 +37,39 @@ impl Proposer {
             .map(|m| self.process_msg(m, now))
             .flatten()
             .collect();
-        if responses.len() != 0 {
+        if !responses.is_empty() {
+            // We made progress, thus returning.
             return responses;
         }
 
-        // Go back to /preparing/ on timeout.
+        // Check whether we are still within the timeout.
         if self
             .state
             .last_progress_at()
-            .map(|t| now - t > TIMEOUT)
-            .unwrap_or(false)
+            .map(|t| now - t < TIMEOUT)
+            .unwrap_or(true)
         {
-            self.current_epoch =
-                Epoch::new(self.current_epoch.epoch + 1, self.current_epoch.identifier);
-
-            let value = self
-                .state
-                .value()
-                .expect("can't be reached from idle state, thus there is a value");
-
-            self.state = ProposerState::Preparing {
-                last_progress_at: now,
-                value: value,
-                promises: vec![],
-            };
-
-            let body = Body::Prepare(self.current_epoch.clone());
-
-            return self.to_all_acceptors(body, now);
+            return vec![];
         }
 
-        vec![]
+        // We timed out - going back to preparing.
+
+        self.epoch = Epoch::new(self.epoch.epoch + 1, self.epoch.identifier);
+
+        let value = self
+            .state
+            .value()
+            .expect("can't be reached from idle state, thus there is a value");
+
+        self.state = ProposerState::Preparing {
+            last_progress_at: now,
+            value,
+            promises: vec![],
+        };
+
+        let body = Body::Prepare(self.epoch);
+
+        return self.broadcast_to_acceptors(body, now);
     }
 
     fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {
@@ -100,9 +100,9 @@ impl Proposer {
                     promises: vec![],
                 };
 
-                let body = Body::Prepare(self.current_epoch.clone());
+                let body = Body::Prepare(self.epoch);
 
-                self.to_all_acceptors(body, now)
+                self.broadcast_to_acceptors(body, now)
             }
         }
     }
@@ -113,6 +113,11 @@ impl Proposer {
         accepted: Option<(Epoch, Value)>,
         now: Instant,
     ) -> Vec<Msg> {
+        // Ignore any messages outside our current epoch.
+        if promised_epoch != self.epoch {
+            return vec![];
+        }
+
         let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
         match state {
             ProposerState::Unreachable => unreachable!(),
@@ -127,7 +132,7 @@ impl Proposer {
             } => {
                 promises.push(Promise {
                     epoch: promised_epoch,
-                    accepted: accepted,
+                    accepted,
                 });
 
                 if promises.len() < self.acceptors.len() / 2 + 1 {
@@ -162,14 +167,19 @@ impl Proposer {
                     received_accepts: 0,
                 };
 
-                let propose_body = Body::Propose(self.current_epoch, self.state.value().unwrap());
+                let propose_body = Body::Propose(self.epoch, self.state.value().unwrap());
 
-                self.to_all_acceptors(propose_body, now)
+                self.broadcast_to_acceptors(propose_body, now)
             }
         }
     }
 
     fn process_accept(&mut self, epoch: Epoch, now: Instant) -> Vec<Msg> {
+        // Ignore any messages outside our current epoch.
+        if epoch != self.epoch {
+            return vec![];
+        }
+
         let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
         match state {
             ProposerState::Unreachable => unimplemented!(),
@@ -193,8 +203,7 @@ impl Proposer {
                     return vec![];
                 }
 
-                self.current_epoch =
-                    Epoch::new(self.current_epoch.epoch + 1, self.current_epoch.identifier);
+                self.epoch = Epoch::new(self.epoch.epoch + 1, self.epoch.identifier);
                 self.state = ProposerState::Idle;
 
                 return vec![Msg {
@@ -210,7 +219,7 @@ impl Proposer {
         }
     }
 
-    fn to_all_acceptors(&mut self, b: Body, now: Instant) -> Vec<Msg> {
+    fn broadcast_to_acceptors(&mut self, b: Body, now: Instant) -> Vec<Msg> {
         self.acceptors
             .iter()
             .map(|a| Msg {
