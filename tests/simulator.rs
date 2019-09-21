@@ -2,45 +2,57 @@ use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
 use paxos_simulator::{Address, Body, Instant, Msg, Value};
 use std::collections::HashMap;
+use rand::Rng;
 
 // Needs to be larger than proposer.rs/TIMEOUT.
-const TIMEOUT: Instant = Instant(10);
+const TIMEOUT: Instant = Instant(100);
+const MAX_MSG_DELAY: Instant = Instant(5);
 
 #[derive(Default, Debug)]
-pub struct Simulator {
+pub struct Simulator<Rng: rand::Rng> {
     now: Instant,
+    msg_delay_rng: Option<Rng>,
+
     proposers: HashMap<Address, Proposer>,
     acceptors: HashMap<Address, Acceptor>,
+
     inbox: Vec<Msg>,
     /// Requests passed to the Simulator beforehand. Later used to ensure
     /// correctness of the simulation.
     requests: Vec<Msg>,
     responses: Vec<Msg>,
+
     // The simulator needs to be able to determine when the simulation is done,
     // thus not making any more progress. One could terminate once no messages
     // are being transferred anymore. But this would break proposer timeouts.
     // Instead let's wait a bit longer once there are no more messages.
     // `last_progress_at` is there to track the above.
     last_progress_at: Instant,
+
     /// Log lines collected to be printed on failure.
     pub log: Vec<String>,
 }
 
-impl Simulator {
+impl<Rng: rand::Rng> Simulator<Rng> {
     pub fn new(
         proposers: HashMap<Address, Proposer>,
         acceptors: HashMap<Address, Acceptor>,
         requests: Vec<Msg>,
-    ) -> Simulator {
+        msg_delay_rng: Option<Rng>,
+    ) -> Simulator<Rng> {
         Simulator {
             now: Default::default(),
-            last_progress_at: Default::default(),
+            msg_delay_rng,
+
             proposers,
             acceptors,
+
             // Init the inbox with the given requests.
             inbox: requests.clone(),
             requests,
             responses: vec![],
+
+            last_progress_at: Default::default(),
             log: Default::default(),
         }
     }
@@ -92,6 +104,17 @@ impl Simulator {
         // Producing new messages is equal to overall progress.
         if new_msgs.len() != 0 {
             self.last_progress_at = self.now;
+        }
+
+        // Delay new messages if random number generator is set.
+        match self.msg_delay_rng {
+            Some(ref mut rng) => {
+                new_msgs = new_msgs.into_iter().map(|mut m| {
+                    m.header.at = m.header.at + rng.gen_range(0, MAX_MSG_DELAY.0);
+                    m
+                }).collect()
+            }
+            None => (),
         }
 
         self.inbox.append(&mut new_msgs.into_iter().collect());

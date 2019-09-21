@@ -1,7 +1,7 @@
 use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
 use std::collections::VecDeque;
 
-const TIMEOUT: Instant = Instant(5);
+const TIMEOUT: Instant = Instant(10);
 
 /// A sequential proposer, handling a single request at a time.
 #[derive(Debug)]

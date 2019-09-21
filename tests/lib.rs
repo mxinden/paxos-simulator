@@ -12,7 +12,7 @@ extern crate quickcheck_macros;
 
 #[test]
 fn single_proposer_three_acceptors_one_request() {
-    let mut s = Builder::new()
+    let mut s = Builder::<StdRng>::new()
         .with_proposers(1)
         .with_accpetors(3)
         .with_requests(vec![(1, 0)])
@@ -23,7 +23,7 @@ fn single_proposer_three_acceptors_one_request() {
 
 #[test]
 fn two_proposer_three_acceptors_two_request() {
-    let mut s = Builder::new()
+    let mut s = Builder::<StdRng>::new()
         .with_proposers(2)
         .with_accpetors(3)
         .with_requests(vec![(1, 0), (2, 1)])
@@ -43,10 +43,11 @@ fn regression_1() {
         .map(|i| (*i, rng.gen_range(0, 1)))
         .collect();
 
-    let mut s = Builder::new()
+    let mut s = Builder::<StdRng>::new()
         .with_proposers(1)
         .with_accpetors(3)
         .with_requests(requests)
+        .with_msg_delay_rng(rng)
         .build();
     s.run().unwrap();
 
@@ -59,6 +60,7 @@ fn regression_1() {
             panic!(e);
         }
     }
+
 }
 
 #[quickcheck]
@@ -83,10 +85,11 @@ fn variable_requests(
         .map(|i| (*i, rng.gen_range(0, proposers)))
         .collect();
 
-    let mut simulator = Builder::new()
+    let mut simulator = Builder::<StdRng>::new()
         .with_proposers(proposers)
         .with_accpetors(acceptors)
         .with_requests(requests)
+        .with_msg_delay_rng(rng)
         .build();
 
     simulator.run().unwrap();
@@ -103,18 +106,24 @@ fn variable_requests(
 }
 
 #[derive(Default)]
-pub struct Builder {
+pub struct Builder<Rng: rand::Rng> {
     a: HashMap<Address, Acceptor>,
     p: HashMap<Address, Proposer>,
     r: Vec<Msg>,
+    msg_delay_rng: Option<Rng>,
 }
 
-impl Builder {
-    pub fn new() -> Builder {
-        Builder::default()
+impl<Rng: rand::Rng> Builder<Rng> {
+    pub fn new() -> Builder<Rng> {
+        Builder{
+            a: Default::default(),
+            p: Default::default(),
+            r: Default::default(),
+            msg_delay_rng: None,
+        }
     }
 
-    pub fn with_proposers(mut self, size: u32) -> Builder {
+    pub fn with_proposers(mut self, size: u32) -> Builder<Rng> {
         for i in 0..size {
             let name = format!("p{}", i);
 
@@ -127,7 +136,7 @@ impl Builder {
         self
     }
 
-    pub fn with_accpetors(mut self, size: u32) -> Builder {
+    pub fn with_accpetors(mut self, size: u32) -> Builder<Rng> {
         for i in 0..size {
             let name = format!("a{}", i);
 
@@ -138,7 +147,7 @@ impl Builder {
         self
     }
 
-    pub fn with_requests(mut self, r: Vec<(u64, u32)>) -> Builder {
+    pub fn with_requests(mut self, r: Vec<(u64, u32)>) -> Builder<Rng> {
         for (i, (instant, proposer)) in r.iter().enumerate() {
             let name = format!("p{}", proposer);
             let value = format!("v{}", i);
@@ -156,7 +165,12 @@ impl Builder {
         self
     }
 
-    pub fn build(self) -> simulator::Simulator {
+    pub fn with_msg_delay_rng(mut self, rng: Rng) -> Builder<Rng> {
+        self.msg_delay_rng = Some(rng);
+        self
+    }
+
+    pub fn build(self) -> simulator::Simulator<Rng> {
         let a_addresses: Vec<Address> = self.a.iter().map(|(_, a)| a.address()).collect();
         let p = self
             .p
@@ -167,6 +181,6 @@ impl Builder {
             })
             .collect();
 
-        simulator::Simulator::new(p, self.a, self.r)
+        simulator::Simulator::new(p, self.a, self.r, self.msg_delay_rng)
     }
 }
