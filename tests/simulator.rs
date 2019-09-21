@@ -12,8 +12,10 @@ pub struct Simulator {
     proposers: HashMap<Address, Proposer>,
     acceptors: HashMap<Address, Acceptor>,
     inbox: Vec<Msg>,
+    /// Requests passed to the Simulator beforehand. Later used to ensure
+    /// correctness of the simulation.
+    requests: Vec<Msg>,
     responses: Vec<Msg>,
-    amount_requests: usize,
     // The simulator needs to be able to determine when the simulation is done,
     // thus not making any more progress. One could terminate once no messages
     // are being transferred anymore. But this would break proposer timeouts.
@@ -28,17 +30,17 @@ impl Simulator {
     pub fn new(
         proposers: HashMap<Address, Proposer>,
         acceptors: HashMap<Address, Acceptor>,
-        inbox: Vec<Msg>,
+        requests: Vec<Msg>,
     ) -> Simulator {
-        let amount_requests = inbox.len();
         Simulator {
             now: Default::default(),
             last_progress_at: Default::default(),
             proposers,
             acceptors,
-            inbox,
+            // Init the inbox with the given requests.
+            inbox: requests.clone(),
+            requests,
             responses: vec![],
-            amount_requests,
             log: Default::default(),
         }
     }
@@ -127,12 +129,23 @@ impl Simulator {
         self.acceptors.get_mut(&m.header.to).unwrap().receive(m);
     }
 
+    /// Ensure that the past simulation is within the consistency guarantees we
+    /// would like to achieve.
+    ///
+    /// Definition of consensus
+    ///
+    /// - All non-faulty processes eventually decide on a value.
+    ///
+    /// - All processes decide on the same value.
+    ///
+    /// - The decided value was intitially proposed.
+    ///
     pub fn ensure_correctness(&self) -> Result<(), String> {
         println!("{:?}", self.responses);
-        if self.responses.len() != self.amount_requests {
+        if self.responses.len() != self.requests.len() {
             return Err(format!(
                 "expected {} responses, got {} responses",
-                self.amount_requests,
+                self.requests.len(),
                 self.responses.len(),
             ));
         }
@@ -156,6 +169,33 @@ impl Simulator {
             return Err(format!(
                 "got more than one final result: '{:?}'",
                 final_values
+            ));
+        }
+
+        if self.requests.len() == 0 {
+            return Ok(());
+        }
+
+        let final_value = unique_final_values.get(0).unwrap();
+
+        let mut decided_value_initialy_proposed = false;
+        for req in self.requests.iter() {
+            match &req.body {
+                Body::Request(v) => {
+                    if v == final_value {
+                        decided_value_initialy_proposed = true;
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        if !decided_value_initialy_proposed {
+            return Err(format!(
+                "expected decided value to be among the initially proposed
+                values, got value \"{:?}\", initial requests \"{:?}\"",
+                final_value,
+                self.requests,
             ));
         }
 
