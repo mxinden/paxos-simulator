@@ -1,8 +1,8 @@
 use paxos_simulator::acceptor::Acceptor;
 use paxos_simulator::proposer::Proposer;
 use paxos_simulator::{Address, Body, Instant, Msg, Value};
+use rand::distributions::Distribution;
 use std::collections::HashMap;
-use rand::Rng;
 
 // Needs to be larger than proposer.rs/TIMEOUT.
 const TIMEOUT: Instant = Instant(100);
@@ -109,10 +109,13 @@ impl<Rng: rand::Rng> Simulator<Rng> {
         // Delay new messages if random number generator is set.
         match self.msg_delay_rng {
             Some(ref mut rng) => {
-                new_msgs = new_msgs.into_iter().map(|mut m| {
-                    m.header.at = m.header.at + rng.gen_range(0, MAX_MSG_DELAY.0);
-                    m
-                }).collect()
+                new_msgs = new_msgs
+                    .into_iter()
+                    .map(|mut m| {
+                        m.header.at = m.header.at + exp_distr_delay(rng);
+                        m
+                    })
+                    .collect()
             }
             None => (),
         }
@@ -217,11 +220,24 @@ impl<Rng: rand::Rng> Simulator<Rng> {
             return Err(format!(
                 "expected decided value to be among the initially proposed
                 values, got value \"{:?}\", initial requests \"{:?}\"",
-                final_value,
-                self.requests,
+                final_value, self.requests,
             ));
         }
 
         Ok(())
     }
+}
+
+/// Returns an emulated network delay based on an exponential distribution.
+fn exp_distr_delay<Rng: rand::Rng>(rng: &mut Rng) -> Instant {
+    std::cmp::min(
+        Instant(
+            rand_distr::Float::to_u64(
+                // Choosing 0.5 is not backed by anything more than trial and error.
+                rand_distr::Exp::new(0.5).unwrap().sample(rng),
+            )
+            .unwrap(),
+        ),
+        MAX_MSG_DELAY,
+    )
 }
