@@ -1,4 +1,4 @@
-use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
+use crate::{Address, Body, Epoch, Header, Instant, Msg, Node, Value};
 use std::collections::VecDeque;
 
 const TIMEOUT: Instant = Instant(10);
@@ -13,6 +13,18 @@ pub struct Proposer {
     state: ProposerState,
 }
 
+impl Node for Proposer {
+    fn receive(&mut self, m: Msg) {
+        self.inbox.push_back(m);
+    }
+
+    fn process(&mut self, now: Instant) -> Vec<Msg> {
+        self.process(now)
+    }
+}
+
+impl crate::Proposer for Proposer{}
+
 impl Proposer {
     pub fn new(address: Address, initial_epoch: Epoch, acceptors: Vec<Address>) -> Self {
         Self {
@@ -24,13 +36,7 @@ impl Proposer {
         }
     }
 
-    /// Receive adds the given message to the incoming-messages buffer. It is
-    /// *not* allowed to do any kind of processing.
-    pub fn receive(&mut self, m: Msg) {
-        self.inbox.push_back(m);
-    }
-
-    pub fn process(&mut self, now: Instant) -> Vec<Msg> {
+    fn process(&mut self, now: Instant) -> Vec<Msg>{
         let messages: Vec<Msg> = self.inbox.drain(0..).collect();
         let responses: Vec<Msg> = messages
             .into_iter()

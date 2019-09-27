@@ -1,4 +1,4 @@
-use crate::{Address, Body, Epoch, Header, Instant, Msg, Value};
+use crate::{Address, Body, Epoch, Header, Instant, Msg, Value, Node};
 use std::collections::VecDeque;
 
 #[derive(Default, Debug)]
@@ -8,6 +8,18 @@ pub struct Acceptor {
     accepted: Option<(Epoch, Value)>,
     inbox: VecDeque<Msg>,
 }
+
+impl Node for Acceptor {
+    fn receive(&mut self, m: Msg) {
+        self.inbox.push_back(m);
+    }
+
+    fn process(&mut self, now: Instant) -> Vec<Msg> {
+        self.process(now)
+    }
+}
+
+impl crate::Acceptor for Acceptor {}
 
 impl Acceptor {
     pub fn new(address: Address) -> Self {
@@ -21,12 +33,6 @@ impl Acceptor {
 
     pub fn address(&self) -> Address {
         self.address.clone()
-    }
-
-    /// Receive adds the given message to the incoming-messages buffer. It is
-    /// *not* allowed to do any kind of processing.
-    pub fn receive(&mut self, m: Msg) {
-        self.inbox.push_back(m);
     }
 
     pub fn process(&mut self, now: Instant) -> Vec<Msg> {

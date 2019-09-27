@@ -1,6 +1,4 @@
-use paxos_simulator::acceptor::Acceptor;
-use paxos_simulator::proposer::Proposer;
-use paxos_simulator::{Address, Body, Instant, Msg, Value};
+use paxos_simulator::{Acceptor, Address, Body, Instant, Msg, Proposer, Value};
 use rand::distributions::Distribution;
 use std::collections::HashMap;
 
@@ -9,12 +7,12 @@ const TIMEOUT: Instant = Instant(100);
 const MAX_MSG_DELAY: Instant = Instant(5);
 
 #[derive(Default, Debug)]
-pub struct Simulator<Rng: rand::Rng> {
+pub struct Simulator<A: Acceptor, P: Proposer, Rng: rand::Rng> {
     now: Instant,
     msg_delay_rng: Option<Rng>,
 
-    proposers: HashMap<Address, Proposer>,
-    acceptors: HashMap<Address, Acceptor>,
+    proposers: HashMap<Address, P>,
+    acceptors: HashMap<Address, A>,
 
     inbox: Vec<Msg>,
     /// Requests passed to the Simulator beforehand. Later used to ensure
@@ -33,13 +31,13 @@ pub struct Simulator<Rng: rand::Rng> {
     pub log: Vec<String>,
 }
 
-impl<Rng: rand::Rng> Simulator<Rng> {
+impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
     pub fn new(
-        proposers: HashMap<Address, Proposer>,
-        acceptors: HashMap<Address, Acceptor>,
+        proposers: HashMap<Address, P>,
+        acceptors: HashMap<Address, A>,
         requests: Vec<Msg>,
         msg_delay_rng: Option<Rng>,
-    ) -> Simulator<Rng> {
+    ) -> Simulator<A, P, Rng> {
         Simulator {
             now: Default::default(),
             msg_delay_rng,

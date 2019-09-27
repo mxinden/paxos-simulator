@@ -1,7 +1,18 @@
 use std::cmp::Ord;
 
-pub mod acceptor;
-pub mod proposer;
+pub mod classic;
+
+/// Node represents a networked logical entity, e.g. a proposer or an acceptor.
+pub trait Node {
+    /// Receive adds the given message to the incoming-messages buffer. It is
+    /// *not* allowed to do any kind of processing.
+    fn receive(&mut self, m: Msg);
+    fn process(&mut self, now: Instant) -> Vec<Msg>;
+}
+
+pub trait Proposer: Node {}
+
+pub trait Acceptor: Node {}
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Msg {
@@ -118,7 +129,7 @@ impl std::ops::Sub for Instant {
 /// Epoch is a tuple of an increasing epoch counter and a proposer specific
 /// identifier to partition the global epoch set among proposers.
 #[derive(Clone, Copy, Default, PartialOrd, PartialEq, Eq)]
-pub struct Epoch{
+pub struct Epoch {
     pub epoch: u32,
     pub identifier: u32,
 }
