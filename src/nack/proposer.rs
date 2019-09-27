@@ -1,6 +1,6 @@
+use super::Body;
 use crate::{Address, Epoch, Header, Instant, Msg, Node, Value};
 use std::collections::VecDeque;
-use super::Body;
 
 const TIMEOUT: Instant = Instant(10);
 
@@ -24,7 +24,7 @@ impl Node<Body> for Proposer {
     }
 }
 
-impl crate::Proposer<Body> for Proposer{}
+impl crate::Proposer<Body> for Proposer {}
 
 impl Proposer {
     pub fn new(address: Address, initial_epoch: Epoch, acceptors: Vec<Address>) -> Self {
@@ -37,7 +37,7 @@ impl Proposer {
         }
     }
 
-    fn process(&mut self, now: Instant) -> Vec<Msg<Body>>{
+    fn process(&mut self, now: Instant) -> Vec<Msg<Body>> {
         let messages: Vec<Msg<Body>> = self.inbox.drain(0..).collect();
         let responses: Vec<Msg<Body>> = messages
             .into_iter()
@@ -60,23 +60,8 @@ impl Proposer {
         }
 
         // We timed out - going back to preparing.
-
         self.epoch = Epoch::new(self.epoch.epoch + 1, self.epoch.identifier);
-
-        let value = self
-            .state
-            .value()
-            .expect("can't be reached from idle state, thus there is a value");
-
-        self.state = ProposerState::Preparing {
-            last_progress_at: now,
-            value,
-            promises: vec![],
-        };
-
-        let body = Body::Prepare(self.epoch);
-
-        self.broadcast_to_acceptors(body, now)
+        self.retry(now)
     }
 
     fn process_msg(&mut self, m: Msg<Body>, now: Instant) -> Vec<Msg<Body>> {
@@ -86,7 +71,8 @@ impl Proposer {
                 self.process_promise(promised_epoch, accepted, now)
             }
             Body::Accept(epoch) => self.process_accept(epoch, now),
-            Body::Prepare(_) | Body::Propose(_, _) | Body::Response(_) => unimplemented!(),
+            Body::Nack(e, f) => self.process_nack(e, f, now),
+            Body::Prepare(_) | Body::Propose(_, _) | Body::Response(_) => unreachable!(),
         }
     }
 
@@ -189,7 +175,7 @@ impl Proposer {
 
         let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
         match state {
-            ProposerState::Unreachable => unimplemented!(),
+            ProposerState::Unreachable => unreachable!(),
             ProposerState::Idle | ProposerState::Preparing { .. } => {
                 self.state = state;
                 return vec![];
@@ -226,6 +212,37 @@ impl Proposer {
         }
     }
 
+    // TODO: Do we need to retry always, or only if we got a majority of nacks
+    // back?
+    fn process_nack(
+        &mut self,
+        our_epoch: Epoch,
+        higher_epoch: Epoch,
+        now: Instant,
+    ) -> Vec<Msg<Body>> {
+        // Ignore any messages outside our current epoch.
+        if our_epoch != self.epoch {
+            return vec![];
+        }
+
+        let state = std::mem::replace(&mut self.state, ProposerState::Unreachable);
+        match state {
+            ProposerState::Unreachable => unreachable!(),
+            ProposerState::Idle => {
+                self.state = state;
+                vec![]
+            }
+            ProposerState::Preparing { .. } | ProposerState::Proposing {..}  => {
+                // self.retry() extracts the value from the current scope, but
+                // we replaced it above with ProposerState::Unreachable. Make
+                // sure to switch it back.
+                self.state = state;
+                self.epoch = Epoch::new(higher_epoch.epoch + 1, self.epoch.identifier);
+                self.retry(now)
+            }
+        }
+    }
+
     fn broadcast_to_acceptors(&mut self, b: Body, now: Instant) -> Vec<Msg<Body>> {
         self.acceptors
             .iter()
@@ -238,6 +255,25 @@ impl Proposer {
                 body: b.clone(),
             })
             .collect()
+    }
+
+    /// Try to serve the client request by starting all over with a Prepare.
+    /// This is necessary on a timeout or e.g. a retry.
+    fn retry(&mut self, now: Instant) -> Vec<Msg<Body>> {
+        let value = self
+            .state
+            .value()
+            .expect("can't be reached from idle state, thus there is a value");
+
+        self.state = ProposerState::Preparing {
+            last_progress_at: now,
+            value,
+            promises: vec![],
+        };
+
+        let body = Body::Prepare(self.epoch);
+
+        self.broadcast_to_acceptors(body, now)
     }
 }
 

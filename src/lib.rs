@@ -1,38 +1,39 @@
 use std::cmp::Ord;
 
 pub mod classic;
+pub mod nack;
 
 /// Node represents a networked logical entity, e.g. a proposer or an acceptor.
-pub trait Node {
+pub trait Node<B: Body> {
     /// Receive adds the given message to the incoming-messages buffer. It is
     /// *not* allowed to do any kind of processing.
-    fn receive(&mut self, m: Msg);
-    fn process(&mut self, now: Instant) -> Vec<Msg>;
+    fn receive(&mut self, m: Msg<B>);
+    fn process(&mut self, now: Instant) -> Vec<Msg<B>>;
 }
 
-pub trait Proposer: Node {}
+pub trait Proposer<B: Body>: Node<B> {}
 
-pub trait Acceptor: Node {}
+pub trait Acceptor<B: Body>: Node<B> {}
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Msg {
+pub struct Msg<B: Body> {
     pub header: Header,
-    pub body: Body,
+    pub body: B,
 }
 
-impl std::fmt::Debug for Msg {
+impl<B: Body> std::fmt::Debug for Msg<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}: {:?}", self.header, self.body)
     }
 }
 
-impl Ord for Msg {
+impl<B: Body> Ord for Msg<B> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.header.at.cmp(&other.header.at)
     }
 }
 
-impl PartialOrd for Msg {
+impl<B: Body> PartialOrd for Msg<B> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
@@ -51,35 +52,19 @@ impl std::fmt::Debug for Header {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub enum Body {
-    /// Request by an end-user.
-    Request(Value),
-    /// Response by a proposer to an end-user.
-    Response(Value),
-    Prepare(Epoch),
-    /// Promised epoch, accepted epoch, accepted value.
-    // TODO: Why not combine the two options, they never occur separately.
-    Promise(Epoch, Option<(Epoch, Value)>),
-    Propose(Epoch, Value),
-    Accept(Epoch),
-}
-
-impl std::fmt::Debug for Body {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Body::Request(v) => write!(f, "request({:?})", v),
-            Body::Response(v) => write!(f, "response({:?})", v),
-            Body::Prepare(e) => write!(f, "prepare({:?})", e),
-            Body::Promise(e, a) => write!(f, "promise({:?}, {:?})", e, a),
-            Body::Propose(e, v) => write!(f, "propose({:?}, {:?})", e, v),
-            Body::Accept(e) => write!(f, "accept({:?})", e),
-        }
-    }
+pub trait Body: Eq + std::fmt::Debug + Clone {
+    fn is_request(&self) -> Option<Value>;
+    fn is_response(&self) -> Option<Value>;
 }
 
 #[derive(Eq, Hash, Clone, Default, PartialOrd, PartialEq)]
 pub struct Address(String);
+
+impl std::cmp::PartialEq<&str> for Address {
+    fn eq(&self, rhs: &&str) -> bool {
+        self.0 == *rhs
+    }
+}
 
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

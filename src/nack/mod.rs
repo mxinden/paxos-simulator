@@ -1,10 +1,10 @@
-use crate::{Value, Epoch};
+use crate::{Epoch, Value};
 
-pub use proposer::Proposer;
 pub use acceptor::Acceptor;
+pub use proposer::Proposer;
 
-mod proposer;
 mod acceptor;
+mod proposer;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Body {
@@ -14,10 +14,13 @@ pub enum Body {
     Response(Value),
     Prepare(Epoch),
     /// Promised epoch, accepted epoch, accepted value.
-    // TODO: Why not combine the two options, they never occur separately.
     Promise(Epoch, Option<(Epoch, Value)>),
     Propose(Epoch, Value),
     Accept(Epoch),
+    /// Negative acknowledgment of either a Prepare or a Propose message send by
+    /// an Acceptor to a Proposer. First epoch represents the declined one,
+    /// second represents the highest known one.
+    Nack(Epoch, Epoch),
 }
 
 impl crate::Body for Body {
@@ -47,6 +50,7 @@ impl std::fmt::Debug for Body {
             Body::Promise(e, a) => write!(f, "promise({:?}, {:?})", e, a),
             Body::Propose(e, v) => write!(f, "propose({:?}, {:?})", e, v),
             Body::Accept(e) => write!(f, "accept({:?})", e),
+            Body::Nack(e, e_high) => write!(f, "nack({:?}, {:?})", e, e_high),
         }
     }
 }

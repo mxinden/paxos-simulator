@@ -7,18 +7,18 @@ const TIMEOUT: Instant = Instant(100);
 const MAX_MSG_DELAY: Instant = Instant(5);
 
 #[derive(Default, Debug)]
-pub struct Simulator<A: Acceptor, P: Proposer, Rng: rand::Rng> {
+pub struct Simulator<A: Acceptor<B>, P: Proposer<B>, B: Body, Rng: rand::Rng> {
     now: Instant,
     msg_delay_rng: Option<Rng>,
 
     proposers: HashMap<Address, P>,
     acceptors: HashMap<Address, A>,
 
-    inbox: Vec<Msg>,
+    inbox: Vec<Msg<B>>,
     /// Requests passed to the Simulator beforehand. Later used to ensure
     /// correctness of the simulation.
-    requests: Vec<Msg>,
-    responses: Vec<Msg>,
+    requests: Vec<Msg<B>>,
+    responses: Vec<Msg<B>>,
 
     // The simulator needs to be able to determine when the simulation is done,
     // thus not making any more progress. One could terminate once no messages
@@ -31,13 +31,13 @@ pub struct Simulator<A: Acceptor, P: Proposer, Rng: rand::Rng> {
     pub log: Vec<String>,
 }
 
-impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
+impl<A: Acceptor<B>, P: Proposer<B>, B: Body, Rng: rand::Rng> Simulator<A, P, B, Rng> {
     pub fn new(
         proposers: HashMap<Address, P>,
         acceptors: HashMap<Address, A>,
-        requests: Vec<Msg>,
+        requests: Vec<Msg<B>>,
         msg_delay_rng: Option<Rng>,
-    ) -> Simulator<A, P, Rng> {
+    ) -> Simulator<A, P, B, Rng> {
         Simulator {
             now: Default::default(),
             msg_delay_rng,
@@ -63,8 +63,6 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
             self.inbox.len()
         ));
 
-        println!("inbox: {:?}", self.inbox);
-
         loop {
             self.tick();
 
@@ -74,7 +72,7 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
             }
 
             // Safety measure to prevent infinite loops.
-            if self.now > Instant(100_000) {
+            if self.now > Instant(1_000) {
                 break;
             }
         }
@@ -131,23 +129,19 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
         }
     }
 
-    fn dispatch_msg(&mut self, m: Msg) {
-        match m.body {
-            Body::Request(_) => self.dispatch_msg_to_proposer(m),
-            Body::Prepare(_) => self.dispatch_msg_to_acceptor(m),
-            Body::Promise(_, _) => self.dispatch_msg_to_proposer(m),
-            Body::Propose(_, _) => self.dispatch_msg_to_acceptor(m),
-            Body::Accept(_) => self.dispatch_msg_to_proposer(m),
-            Body::Response(_) => self.responses.push(m),
-        };
-    }
+    fn dispatch_msg(&mut self, m: Msg<B>) {
+        if m.header.to == "" {
+            self.responses.push(m);
+            return;
+        }
 
-    fn dispatch_msg_to_proposer(&mut self, m: Msg) {
-        self.proposers.get_mut(&m.header.to).unwrap().receive(m);
-    }
-
-    fn dispatch_msg_to_acceptor(&mut self, m: Msg) {
-        self.acceptors.get_mut(&m.header.to).unwrap().receive(m);
+        match self.proposers.get_mut(&m.header.to) {
+            Some(p) => p.receive(m),
+            None => match self.acceptors.get_mut(&m.header.to) {
+                Some(a) => a.receive(m),
+                None => panic!("{:?} is not a known acceptor nor proposer", m.header.to),
+            }
+        }
     }
 
     /// Ensure that the past simulation is within the consistency guarantees we
@@ -162,7 +156,6 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
     /// - The decided value was intitially proposed.
     ///
     pub fn ensure_correctness(&self) -> Result<(), String> {
-        println!("{:?}", self.responses);
         if self.responses.len() != self.requests.len() {
             return Err(format!(
                 "expected {} responses, got {} responses",
@@ -174,13 +167,11 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
         let final_values = self
             .responses
             .iter()
-            .map(|r| match &r.body {
-                Body::Response(v) => v.clone(),
+            .map(|r| match &r.body.is_response() {
+                Some(v) => v.clone(),
                 _ => unreachable!(),
             })
             .collect::<Vec<Value>>();
-
-        println!("{:?}", final_values);
 
         let mut unique_final_values = final_values.clone();
         unique_final_values.sort_unstable();
@@ -201,8 +192,8 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
 
         let mut decided_value_initialy_proposed = false;
         for req in self.requests.iter() {
-            match &req.body {
-                Body::Request(v) => {
+            match &req.body.is_request() {
+                 Some(v) => {
                     if v == final_value {
                         decided_value_initialy_proposed = true;
                     }
@@ -220,6 +211,10 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
         }
 
         Ok(())
+    }
+
+    pub fn get_now(&self) -> Instant {
+        self.now
     }
 }
 
