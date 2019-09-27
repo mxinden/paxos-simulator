@@ -88,7 +88,7 @@ fn variable_requests(
         .map(|i| (*i, rng.gen_range(0, proposers)))
         .collect();
 
-    let mut simulators = vec![ClassicPaxosBuilder::<StdRng>::new()
+    let simulators = vec![ClassicPaxosBuilder::<StdRng>::new()
         .with_proposers(proposers)
         .with_accpetors(acceptors)
         .with_requests(requests)
@@ -109,7 +109,7 @@ fn variable_requests(
         }
     }
 
-    return TestResult::passed();
+    TestResult::passed()
 }
 
 trait Builder<A: Acceptor, P: Proposer, Rng: rand::Rng> {

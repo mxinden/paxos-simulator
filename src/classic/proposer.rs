@@ -75,7 +75,7 @@ impl Proposer {
 
         let body = Body::Prepare(self.epoch);
 
-        return self.broadcast_to_acceptors(body, now);
+        self.broadcast_to_acceptors(body, now)
     }
 
     fn process_msg(&mut self, m: Msg, now: Instant) -> Vec<Msg> {

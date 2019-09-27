@@ -69,12 +69,12 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
             self.tick();
 
             // Check if there is any progress.
-            if self.inbox.len() == 0 && self.now - self.last_progress_at > TIMEOUT {
+            if self.inbox.is_empty() && self.now - self.last_progress_at > TIMEOUT {
                 break;
             }
 
             // Safety measure to prevent infinite loops.
-            if self.now > Instant(100000) {
+            if self.now > Instant(100_000) {
                 break;
             }
         }
@@ -100,22 +100,19 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
         }
 
         // Producing new messages is equal to overall progress.
-        if new_msgs.len() != 0 {
+        if new_msgs.is_empty() {
             self.last_progress_at = self.now;
         }
 
         // Delay new messages if random number generator is set.
-        match self.msg_delay_rng {
-            Some(ref mut rng) => {
-                new_msgs = new_msgs
-                    .into_iter()
-                    .map(|mut m| {
-                        m.header.at = m.header.at + exp_distr_delay(rng);
-                        m
-                    })
-                    .collect()
-            }
-            None => (),
+        if let Some(ref mut rng) = self.msg_delay_rng {
+            new_msgs = new_msgs
+                .into_iter()
+                .map(|mut m| {
+                    m.header.at = m.header.at + exp_distr_delay(rng);
+                    m
+                })
+                .collect()
         }
 
         self.inbox.append(&mut new_msgs.into_iter().collect());
@@ -196,7 +193,7 @@ impl<A: Acceptor, P: Proposer, Rng: rand::Rng> Simulator<A, P, Rng> {
             ));
         }
 
-        if self.requests.len() == 0 {
+        if self.requests.is_empty() {
             return Ok(());
         }
 
